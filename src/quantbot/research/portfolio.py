@@ -6,7 +6,7 @@ from typing import Any
 
 import pandas as pd
 
-from quantbot.research.signals import add_strategy_positions, strategy_returns
+from quantbot.research.signals import add_strategy_positions, filtered_strategy_returns, strategy_returns
 
 
 def build_enriched_bars(bars: pd.DataFrame) -> pd.DataFrame:
@@ -33,7 +33,11 @@ def build_unit_returns(enriched: pd.DataFrame, legs: list[dict[str, Any]]) -> pd
             raise ValueError(f"No bars found for {symbol}")
         if strategy not in group.columns:
             raise ValueError(f"Strategy {strategy} missing for {symbol}")
-        returns = strategy_returns(group, strategy, leverage=weight)
+        regime = leg.get("regime")
+        if regime:
+            returns = filtered_strategy_returns(group, strategy, leverage=weight, rules=regime)
+        else:
+            returns = strategy_returns(group, strategy, leverage=weight)
         returns.index = pd.to_datetime(group["time"], utc=True)
         returns.name = f"{symbol}_{strategy}"
         leg_returns.append(returns)

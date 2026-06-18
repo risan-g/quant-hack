@@ -37,6 +37,15 @@ class AdaptiveRiskResult:
     drawdown: pd.Series
 
 
+@dataclass(frozen=True)
+class RiskState:
+    equity: float
+    peak_equity: float
+    drawdown: float
+    gross_leverage: float
+    cooldown_bars: int
+
+
 class AdaptiveRiskGovernor:
     """Apply competition-aware gross leverage scaling to raw portfolio returns."""
 
@@ -86,6 +95,45 @@ class AdaptiveRiskGovernor:
             equity=pd.Series(equity_values, index=index, name="equity"),
             gross_leverage=pd.Series(leverage_values, index=index, name="gross_leverage"),
             drawdown=pd.Series(drawdown_values, index=index, name="drawdown"),
+        )
+
+    def current_state(
+        self,
+        raw_unit_returns: pd.Series,
+        initial_equity: float = 1_000_000.0,
+    ) -> RiskState:
+        """Return risk state for the next decision after realized returns."""
+        clean = raw_unit_returns.fillna(0.0)
+        equity = initial_equity
+        peak = initial_equity
+        cooldown = 0
+        realized_returns: list[float] = []
+
+        for raw_return in clean:
+            peak = max(peak, equity)
+            drawdown = 0.0 if peak <= 0 else (peak - equity) / peak
+            leverage = self._leverage_for_state(drawdown, realized_returns, cooldown)
+            scaled_return = float(raw_return) * leverage
+            equity *= 1.0 + scaled_return
+
+            if scaled_return < 0:
+                recent = realized_returns[-self.config.recent_loss_window :]
+                if sum(recent) + scaled_return <= self.config.recent_loss_cut:
+                    cooldown = self.config.recovery_bars
+            else:
+                cooldown = max(0, cooldown - 1)
+
+            realized_returns.append(scaled_return)
+
+        peak = max(peak, equity)
+        drawdown = 0.0 if peak <= 0 else (peak - equity) / peak
+        leverage = self._leverage_for_state(drawdown, realized_returns, cooldown)
+        return RiskState(
+            equity=equity,
+            peak_equity=peak,
+            drawdown=drawdown,
+            gross_leverage=leverage,
+            cooldown_bars=cooldown,
         )
 
     def _leverage_for_state(

@@ -176,6 +176,19 @@ Run the adaptive portfolio:
 
 ```bash
 .venv/bin/python scripts/backtest_adaptive_portfolio.py --bars data/processed/bars_15min.parquet --config configs/portfolio_adaptive.yaml
+.venv/bin/python scripts/backtest_adaptive_portfolio.py --bars data/processed/bars_15min.parquet --config configs/portfolio_guarded.yaml --equity-output reports/guarded_equity.csv
+```
+
+Emit latest decision report:
+
+```bash
+.venv/bin/python scripts/decision_report.py --bars data/processed/bars_15min.parquet --config configs/portfolio_guarded.yaml
+```
+
+Create a manual execution ticket from latest decision:
+
+```bash
+.venv/bin/python scripts/create_execution_ticket.py --bars data/processed/bars_15min.parquet --config configs/portfolio_guarded.yaml
 ```
 
 Sweep adaptive risk parameters:
@@ -188,6 +201,12 @@ Evaluate adaptive performance by subperiod:
 
 ```bash
 .venv/bin/python scripts/evaluate_periods.py --bars data/processed/bars_15min.parquet --config configs/portfolio_adaptive.yaml
+```
+
+Sweep regime filters:
+
+```bash
+.venv/bin/python scripts/sweep_regime_filters.py --bars data/processed/bars_15min.parquet --config configs/portfolio_adaptive.yaml
 ```
 
 Run walk-forward strategy selection:

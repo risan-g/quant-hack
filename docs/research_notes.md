@@ -153,3 +153,67 @@ Robust daily-stability selection:
 | 2026-05-21..29 -> 2026-05-31..06-10 | 1.59% | 6.66% | 0.0087 |
 
 Interpretation: unconstrained strategy selection is currently not robust enough. The stronger path is to use a small, human-reviewed portfolio of structurally plausible legs and use data-driven sweeps primarily for risk calibration. Strategy selection should be constrained by market role and regime logic, not pure recent backtest ranking.
+
+## Regime Filters
+
+Added optional per-leg regime filters based on:
+
+- realized-volatility ratio
+- trend strength
+- spread z-score
+
+The first hand-authored volatility/trend regime config was too restrictive:
+
+- Return: -2.39%
+- Max drawdown: 8.47%
+- Sharpe: -0.0041
+
+A sweep of simple filter families found that the best current variant is much simpler: apply a spread guard to momentum/breakout legs and a looser spread guard to the mean-reversion leg.
+
+| Variant | Return | Max Drawdown | 15-min Sharpe |
+| --- | ---: | ---: | ---: |
+| momentum/breakout spread guard | 28.62% | 8.72% | 0.0366 |
+| spread-only all legs | 25.94% | 8.91% | 0.0336 |
+| mean-reversion trend guard | 25.12% | 8.96% | 0.0327 |
+| loose volatility filter | 22.80% | 7.85% | 0.0332 |
+| no regime filter | 24.64% | 9.18% | 0.0324 |
+
+Current promoted config: `configs/portfolio_guarded.yaml`.
+
+Subperiod evaluation for the guarded config:
+
+| Period | Return | Max Drawdown | 15-min Sharpe |
+| --- | ---: | ---: | ---: |
+| 2026-05-11 to 2026-05-20 | 7.86% | 7.54% | 0.0312 |
+| 2026-05-21 to 2026-05-29 | 8.93% | 5.21% | 0.0428 |
+| 2026-05-31 to 2026-06-10 | 12.40% | 7.30% | 0.0435 |
+
+Interpretation: quote quality/spread filtering appears useful and improved all three subperiods. More elaborate volatility/trend filters need better validation before they should affect live trading.
+
+## Decision Output
+
+Added a decision report layer that converts the latest bars plus portfolio config into:
+
+- current estimated equity and drawdown
+- next gross leverage from the adaptive risk governor
+- per-leg signal side
+- regime permission status
+- target leverage and notional per instrument
+- net directional leverage and gross notional
+
+This is execution-adapter agnostic. It can drive API orders, MT5 orders, chat/manual execution, or a dashboard once the competition trading method unlocks.
+
+## Execution Planning
+
+Added typed execution models and a manual execution adapter.
+
+The execution planner converts decision report target notionals into order intents:
+
+- `symbol`
+- side: buy/sell
+- order type
+- notional USD
+- target leverage
+- reason string
+
+The manual adapter writes a JSON ticket that can be used for manual entry, chat-interface execution, or as the contract for future API/MT5 adapters.

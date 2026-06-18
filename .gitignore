@@ -20,3 +20,4 @@ data/samples/*.parquet
 reports/*.csv
 reports/*.json
 reports/*.html
+reports/execution_tickets/
