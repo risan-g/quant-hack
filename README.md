@@ -171,3 +171,28 @@ Run the current baseline portfolio:
 ```bash
 .venv/bin/python scripts/backtest_portfolio.py --bars data/processed/bars_15min.parquet --config configs/portfolio_baseline.yaml
 ```
+
+Run the adaptive portfolio:
+
+```bash
+.venv/bin/python scripts/backtest_adaptive_portfolio.py --bars data/processed/bars_15min.parquet --config configs/portfolio_adaptive.yaml
+```
+
+Sweep adaptive risk parameters:
+
+```bash
+.venv/bin/python scripts/sweep_risk_configs.py --bars data/processed/bars_15min.parquet --config configs/portfolio_adaptive.yaml
+```
+
+Evaluate adaptive performance by subperiod:
+
+```bash
+.venv/bin/python scripts/evaluate_periods.py --bars data/processed/bars_15min.parquet --config configs/portfolio_adaptive.yaml
+```
+
+Run walk-forward strategy selection:
+
+```bash
+.venv/bin/python scripts/walk_forward_select.py --bars data/processed/bars_15min.parquet
+.venv/bin/python scripts/walk_forward_select.py --bars data/processed/bars_15min.parquet --robust --output reports/walk_forward_robust.csv
+```
