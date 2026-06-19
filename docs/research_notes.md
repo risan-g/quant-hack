@@ -221,3 +221,5 @@ The manual adapter writes a JSON ticket that can be used for manual entry, chat-
 Added a manual live-quote ticket script. It accepts live bid/ask quotes copied from MT5 Market Watch and re-computes MT5 lot volumes from current prices. This is a safe interim bridge while MT5 automation is unresolved.
 
 Important limitation: this only re-sizes existing strategy targets. It does not recompute signals from live MT5 bar history.
+
+Added a human-readable markdown ticket formatter and MT5 runbook for launch-day operations.

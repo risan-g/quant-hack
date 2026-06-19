@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 from quantbot.execution.models import ExecutionPlan, ExecutionReceipt
+from quantbot.execution.formatting import format_manual_ticket
 
 
 class ExecutionAdapter(ABC):
@@ -24,11 +25,13 @@ class ManualExecutionAdapter(ExecutionAdapter):
     def submit(self, plan: ExecutionPlan) -> ExecutionReceipt:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         safe_timestamp = plan.timestamp.replace(":", "").replace("+", "_").replace("-", "")
-        path = self.output_dir / f"manual_ticket_{safe_timestamp}.json"
-        path.write_text(json.dumps(plan.model_dump(mode="json"), indent=2), encoding="utf-8")
+        json_path = self.output_dir / f"manual_ticket_{safe_timestamp}.json"
+        markdown_path = self.output_dir / f"manual_ticket_{safe_timestamp}.md"
+        json_path.write_text(json.dumps(plan.model_dump(mode="json"), indent=2), encoding="utf-8")
+        markdown_path.write_text(format_manual_ticket(plan), encoding="utf-8")
         return ExecutionReceipt(
             adapter="manual",
             accepted=True,
-            message=f"Wrote manual execution ticket to {path}",
+            message=f"Wrote manual execution tickets to {json_path} and {markdown_path}",
             order_count=len(plan.orders),
         )

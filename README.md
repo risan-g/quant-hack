@@ -200,6 +200,8 @@ Re-size an execution ticket with live MT5 quotes copied from Market Watch:
   --quote USDCAD:1.39470:1.39483
 ```
 
+See [docs/mt5_runbook.md](docs/mt5_runbook.md) for the MT5 operating checklist.
+
 Sweep adaptive risk parameters:
 
 ```bash
