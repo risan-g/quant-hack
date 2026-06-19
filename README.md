@@ -191,6 +191,15 @@ Create a manual execution ticket from latest decision:
 .venv/bin/python scripts/create_execution_ticket.py --bars data/processed/bars_15min.parquet --config configs/portfolio_guarded.yaml
 ```
 
+Re-size an execution ticket with live MT5 quotes copied from Market Watch:
+
+```bash
+.venv/bin/python scripts/manual_quote_ticket.py \
+  --quote XAUUSD:4099.10:4099.42 \
+  --quote USDCHF:0.79990:0.80005 \
+  --quote USDCAD:1.39470:1.39483
+```
+
 Sweep adaptive risk parameters:
 
 ```bash

@@ -217,3 +217,7 @@ The execution planner converts decision report target notionals into order inten
 - reason string
 
 The manual adapter writes a JSON ticket that can be used for manual entry, chat-interface execution, or as the contract for future API/MT5 adapters.
+
+Added a manual live-quote ticket script. It accepts live bid/ask quotes copied from MT5 Market Watch and re-computes MT5 lot volumes from current prices. This is a safe interim bridge while MT5 automation is unresolved.
+
+Important limitation: this only re-sizes existing strategy targets. It does not recompute signals from live MT5 bar history.

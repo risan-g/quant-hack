@@ -1,5 +1,5 @@
 from quantbot.execution.models import OrderSide
-from quantbot.execution.planner import plan_from_decision
+from quantbot.execution.planner import plan_from_decision, reprice_plan_with_quotes
 from quantbot.execution.sizing import SymbolSpec, lots_for_notional_usd
 from quantbot.live.decision import DecisionLeg, DecisionReport
 
@@ -76,3 +76,45 @@ def test_lots_for_usdjpy_notional() -> None:
         volume_step=0.01,
     )
     assert lots_for_notional_usd(spec, notional_usd=1_929_313, mid_price=160) == 19.29
+
+
+def test_reprice_plan_with_quotes_sets_volume() -> None:
+    report = DecisionReport(
+        timestamp="2026-06-10T23:45:00+00:00",
+        config_name="test.yaml",
+        equity_usd=1_000_000,
+        peak_equity_usd=1_000_000,
+        drawdown=0,
+        gross_leverage=5,
+        cooldown_bars=0,
+        active_legs=1,
+        net_directional_leverage=1,
+        gross_target_notional_usd=410_000,
+        legs=[
+            DecisionLeg(
+                symbol="XAUUSD",
+                strategy="momentum_8",
+                side="long",
+                raw_signal=1,
+                allowed_by_regime=True,
+                weight=0.3,
+                mid_price=4000,
+                spread_fraction=0.0001,
+                spread_z=0.5,
+                target_notional_usd=410_000,
+                target_leverage=0.41,
+            )
+        ],
+    )
+    plan = plan_from_decision(report)
+    spec = SymbolSpec(
+        symbol="XAUUSD",
+        contract_size=100,
+        contract_asset="XAU",
+        quote_currency="USD",
+        min_volume=0.01,
+        max_volume=100,
+        volume_step=0.01,
+    )
+    repriced = reprice_plan_with_quotes(plan, {"XAUUSD": spec}, {"XAUUSD": 4100})
+    assert repriced.orders[0].volume_lots == 1.0

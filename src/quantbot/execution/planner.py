@@ -48,3 +48,37 @@ def plan_from_decision(
         gross_leverage=report.gross_leverage,
         orders=orders,
     )
+
+
+def reprice_plan_with_quotes(
+    plan: ExecutionPlan,
+    symbol_specs: dict[str, SymbolSpec],
+    mid_prices: dict[str, float],
+) -> ExecutionPlan:
+    """Recompute MT5 lot volumes using current live mid prices."""
+    orders: list[OrderIntent] = []
+    for order in plan.orders:
+        spec = symbol_specs.get(order.symbol)
+        if spec is None:
+            raise ValueError(f"Missing symbol spec for {order.symbol}")
+        mid_price = mid_prices.get(order.symbol)
+        if mid_price is None:
+            raise ValueError(f"Missing live quote for {order.symbol}")
+        orders.append(
+            order.model_copy(
+                update={
+                    "volume_lots": lots_for_notional_usd(
+                        spec,
+                        order.notional_usd,
+                        mid_price,
+                    )
+                }
+            )
+        )
+
+    return ExecutionPlan(
+        timestamp=plan.timestamp,
+        equity_usd=plan.equity_usd,
+        gross_leverage=plan.gross_leverage,
+        orders=orders,
+    )
