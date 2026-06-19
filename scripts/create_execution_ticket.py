@@ -13,6 +13,7 @@ import yaml
 
 from quantbot.execution.adapters import ManualExecutionAdapter
 from quantbot.execution.planner import plan_from_decision
+from quantbot.execution.sizing import load_symbol_specs
 from quantbot.live.decision import generate_decision_report
 
 
@@ -22,6 +23,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", type=Path, default=Path("configs/portfolio_guarded.yaml"))
     parser.add_argument("--output-dir", type=Path, default=Path("reports/execution_tickets"))
     parser.add_argument("--min-notional-usd", type=float, default=10_000.0)
+    parser.add_argument("--symbol-specs", type=Path, default=Path("configs/mt5_symbol_specs.yaml"))
     return parser.parse_args()
 
 
@@ -35,7 +37,12 @@ def main() -> None:
     bars = pd.read_parquet(args.bars)
     config = load_config(args.config)
     report = generate_decision_report(bars, config, config_name=args.config.name)
-    plan = plan_from_decision(report, min_notional_usd=args.min_notional_usd)
+    specs = load_symbol_specs(args.symbol_specs)
+    plan = plan_from_decision(
+        report,
+        min_notional_usd=args.min_notional_usd,
+        symbol_specs=specs,
+    )
     receipt = ManualExecutionAdapter(args.output_dir).submit(plan)
 
     print("EXECUTION_PLAN")

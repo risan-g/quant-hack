@@ -21,6 +21,7 @@ class OrderIntent(BaseModel):
     side: OrderSide
     order_type: OrderType = OrderType.MARKET
     notional_usd: float = Field(gt=0)
+    volume_lots: float | None = Field(default=None, ge=0)
     target_leverage: float
     reduce_only: bool = False
     reason: str

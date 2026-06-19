@@ -1,5 +1,6 @@
 from quantbot.execution.models import OrderSide
 from quantbot.execution.planner import plan_from_decision
+from quantbot.execution.sizing import SymbolSpec, lots_for_notional_usd
 from quantbot.live.decision import DecisionLeg, DecisionReport
 
 
@@ -49,3 +50,29 @@ def test_plan_from_decision_skips_flat_and_maps_sides() -> None:
     assert len(plan.orders) == 1
     assert plan.orders[0].side == OrderSide.BUY
     assert plan.orders[0].notional_usd == 300_000
+
+
+def test_lots_for_xauusd_notional() -> None:
+    spec = SymbolSpec(
+        symbol="XAUUSD",
+        contract_size=100,
+        contract_asset="XAU",
+        quote_currency="USD",
+        min_volume=0.01,
+        max_volume=100,
+        volume_step=0.01,
+    )
+    assert lots_for_notional_usd(spec, notional_usd=3_858_626, mid_price=4100) == 9.41
+
+
+def test_lots_for_usdjpy_notional() -> None:
+    spec = SymbolSpec(
+        symbol="USDJPY",
+        contract_size=100_000,
+        contract_asset="USD",
+        quote_currency="JPY",
+        min_volume=0.01,
+        max_volume=100,
+        volume_step=0.01,
+    )
+    assert lots_for_notional_usd(spec, notional_usd=1_929_313, mid_price=160) == 19.29

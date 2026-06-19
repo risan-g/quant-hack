@@ -1,0 +1,61 @@
+# MT5 contract specs observed from Syphonix MetaTrader 5.
+#
+# Keep credentials out of this file. These are only public-ish instrument sizing
+# details needed to convert USD notional targets into MT5 lot volumes.
+symbols:
+  XAUUSD:
+    contract_size: 100
+    contract_asset: XAU
+    quote_currency: USD
+    min_volume: 0.01
+    max_volume: 100
+    volume_step: 0.01
+  XAGUSD:
+    contract_size: 5000
+    contract_asset: XAG
+    quote_currency: USD
+    min_volume: 0.01
+    max_volume: 100
+    volume_step: 0.01
+  EURUSD:
+    contract_size: 100000
+    contract_asset: EUR
+    quote_currency: USD
+    min_volume: 0.01
+    max_volume: 100
+    volume_step: 0.01
+  GBPUSD:
+    contract_size: 100000
+    contract_asset: GBP
+    quote_currency: USD
+    min_volume: 0.01
+    max_volume: 100
+    volume_step: 0.01
+  AUDUSD:
+    contract_size: 100000
+    contract_asset: AUD
+    quote_currency: USD
+    min_volume: 0.01
+    max_volume: 100
+    volume_step: 0.01
+  USDJPY:
+    contract_size: 100000
+    contract_asset: USD
+    quote_currency: JPY
+    min_volume: 0.01
+    max_volume: 100
+    volume_step: 0.01
+  USDCHF:
+    contract_size: 100000
+    contract_asset: USD
+    quote_currency: CHF
+    min_volume: 0.01
+    max_volume: 100
+    volume_step: 0.01
+  USDCAD:
+    contract_size: 100000
+    contract_asset: USD
+    quote_currency: CAD
+    min_volume: 0.01
+    max_volume: 100
+    volume_step: 0.01
