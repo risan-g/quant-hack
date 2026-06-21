@@ -15,6 +15,14 @@ def format_manual_ticket(plan: ExecutionPlan) -> str:
         f"- Gross order notional: `${plan.gross_notional_usd:,.2f}`",
         f"- Orders: `{len(plan.orders)}`",
         "",
+        "## Pre-Trade Gates",
+        "",
+        "- Tiny EURUSD 0.01 open-close test has succeeded.",
+        "- MT5 Trade tab is flat unless this ticket intentionally modifies an existing net position.",
+        "- MT5 netting mode keeps one net position per symbol.",
+        "- Ticket timestamp and data source are understood before entry.",
+        "- If MT5 says `market closed`, stop and wait; do not repeatedly retry.",
+        "",
         "## Orders",
         "",
     ]
@@ -50,6 +58,8 @@ def format_manual_ticket(plan: ExecutionPlan) -> str:
             "4. Enter the MT5 volume exactly as shown.",
             "5. Confirm symbol, side, and volume before clicking Buy/Sell.",
             "6. After all orders, verify the Trade tab positions match this ticket.",
+            "",
+            "MT5 netting mode keeps one net position per symbol. Opposite-side orders can reduce, close, or flip that net position.",
             "",
             "If trading is disabled server-side, do not retry repeatedly. Wait for the official launch window.",
         ]

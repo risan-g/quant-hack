@@ -7,9 +7,11 @@ This runbook is for operating the competition account through MetaTrader 5.
 - MT5 login works.
 - Account balance/equity shows 1,000,000 USD.
 - All 15 competition symbols are visible.
-- Trading is currently disabled server-side.
+- Journal reports trading enabled in netting mode.
+- Order attempts currently return `market closed`, including EURUSD and crypto.
 
-Do not repeatedly retry orders while the server says trading is disabled.
+Treat this as a server/session gate until the official launch or market session
+opens. Do not repeatedly retry orders while MT5 says `market closed`.
 
 ## Visible Competition Symbols
 
@@ -63,6 +65,24 @@ Use EURUSD, not gold or crypto.
 
 Only after this test succeeds should strategy-sized trades be considered.
 
+## Launch Decision Tree
+
+Use this sequence around the official 22:00 BST launch.
+
+1. Confirm the Trade tab shows no open positions.
+2. Confirm Market Watch still shows all competition symbols.
+3. Try exactly one tiny EURUSD `0.01` market order.
+4. If MT5 still says `market closed`, stop and check the Journal tab. Wait a few
+   minutes before trying again.
+5. If the tiny order opens, close it immediately.
+6. If the close succeeds and Trade tab is flat, manual strategy tickets are
+   allowed.
+7. If any open/close step behaves unexpectedly, stay flat and use mobile only as
+   backup monitoring/close control.
+
+Do not start with gold, crypto, or multi-leg strategy size before the tiny
+EURUSD open-close test has succeeded.
+
 ## Manual Strategy Ticket Workflow
 
 Generate the ticket:
@@ -84,6 +104,38 @@ Or re-size with live quotes copied from Market Watch:
 ```
 
 The generated markdown ticket gives the symbol, side, and MT5 lot volume for manual entry.
+
+The live quote ticket only re-sizes existing strategy targets with copied MT5
+quotes. It does not recompute live signals from current MT5 bar history.
+
+Before entering a manual strategy ticket:
+
+1. Confirm the tiny EURUSD open-close test succeeded.
+2. Confirm the ticket timestamp and understand whether it is based on historical
+   bars or refreshed live inputs.
+3. Confirm the Trade tab is flat unless the ticket is intentionally modifying an
+   existing net position.
+4. Enter one symbol at a time and re-check symbol, side, and volume before each
+   click.
+5. After entry, compare the Trade tab against the ticket.
+
+MT5 netting mode means there is one net position per symbol. A new order in the
+opposite direction can reduce, close, or flip the existing position.
+
+## EA Bridge Decision
+
+Do not deploy an Expert Advisor before the first successful tiny manual order.
+
+A dry-run EA bridge can be useful later for writing proposed orders into MT5 and
+checking that MT5 sees the same symbols, volumes, and account state. It should
+start in logging-only mode and must not place orders until it has been tested
+while the account is flat.
+
+For launch, the safer choice is:
+
+1. manual tiny EURUSD test;
+2. manual ticket workflow if the platform behaves normally;
+3. only then consider a dry-run EA bridge for monitoring or future automation.
 
 ## Safety Rules
 

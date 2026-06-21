@@ -22,3 +22,18 @@ def test_format_manual_ticket_includes_volume() -> None:
     assert "XAUUSD" in ticket
     assert "1.00" in ticket
     assert "SELL" in ticket
+
+
+def test_format_manual_ticket_includes_launch_gates() -> None:
+    plan = ExecutionPlan(
+        timestamp="2026-06-21T21:00:00+00:00",
+        equity_usd=1_000_000,
+        gross_leverage=0,
+        orders=[],
+    )
+
+    ticket = format_manual_ticket(plan)
+
+    assert "Tiny EURUSD 0.01 open-close test has succeeded." in ticket
+    assert "market closed" in ticket
+    assert "net position per symbol" in ticket
