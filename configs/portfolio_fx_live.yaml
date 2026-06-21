@@ -1,0 +1,38 @@
+# Temporary live-trading config for when XAUUSD MT5 candles are stale.
+#
+# This keeps the researched FX legs from the guarded portfolio and reweights
+# them to sum to 1.0. Use this only while the MT5 live data bridge has fresh FX
+# bars but stale gold bars.
+legs:
+  - symbol: USDJPY
+    strategy: mean_reversion_8
+    weight: 0.35
+    regime:
+      max_spread_z: 3.0
+  - symbol: USDCHF
+    strategy: momentum_32
+    weight: 0.25
+    regime:
+      max_spread_z: 2.0
+  - symbol: AUDUSD
+    strategy: breakout_32
+    weight: 0.20
+    regime:
+      max_spread_z: 2.0
+  - symbol: USDCAD
+    strategy: momentum_32
+    weight: 0.20
+    regime:
+      max_spread_z: 2.0
+
+risk:
+  base_gross_leverage: 4.0
+  attack_gross_leverage: 6.0
+  defend_gross_leverage: 1.0
+  max_gross_leverage: 8.0
+  soft_drawdown: 0.08
+  hard_drawdown: 0.12
+  attack_drawdown: 0.02
+  recent_loss_window: 16
+  recent_loss_cut: -0.012
+  recovery_bars: 8

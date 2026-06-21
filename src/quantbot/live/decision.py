@@ -126,3 +126,20 @@ def generate_decision_report(
         gross_target_notional_usd=gross_target_notional,
         legs=decision_legs,
     )
+
+
+def rescale_decision_report(report: DecisionReport, execution_equity_usd: float) -> DecisionReport:
+    """Rescale target notionals to actual execution equity while preserving leverage."""
+    legs = [
+        leg.model_copy(
+            update={"target_notional_usd": execution_equity_usd * leg.target_leverage}
+        )
+        for leg in report.legs
+    ]
+    return report.model_copy(
+        update={
+            "equity_usd": execution_equity_usd,
+            "gross_target_notional_usd": sum(abs(leg.target_notional_usd) for leg in legs),
+            "legs": legs,
+        }
+    )

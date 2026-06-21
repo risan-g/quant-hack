@@ -14,6 +14,7 @@ __pycache__/
 pricer-output-*/
 data/raw/
 data/processed/
+data/live/
 data/samples/*.parquet
 
 # Local reports can be regenerated.

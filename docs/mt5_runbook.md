@@ -8,10 +8,11 @@ This runbook is for operating the competition account through MetaTrader 5.
 - Account balance/equity shows 1,000,000 USD.
 - All 15 competition symbols are visible.
 - Journal reports trading enabled in netting mode.
-- Order attempts currently return `market closed`, including EURUSD and crypto.
+- Tiny `EURUSD` `0.01` open-close test succeeded after launch.
+- Trade tab was flat after the test and Journal was clean.
 
-Treat this as a server/session gate until the official launch or market session
-opens. Do not repeatedly retry orders while MT5 says `market closed`.
+Strategy-sized trades still require a fresh live-data ticket. Do not execute the
+old historical ticket from the June 10 bar file.
 
 ## Visible Competition Symbols
 
@@ -121,6 +122,79 @@ Before entering a manual strategy ticket:
 
 MT5 netting mode means there is one net position per symbol. A new order in the
 opposite direction can reduce, close, or flip the existing position.
+
+## MT5 Live Data Bridge
+
+The live data bridge is one-way and non-trading:
+
+```text
+MT5 completed M15 bars -> CSV file -> Python importer -> fresh manual ticket
+```
+
+The MT5 exporter file is:
+
+```text
+mt5/ExportLiveBars.mq5
+```
+
+It exports completed M15 candles for the configured strategy symbols:
+
+```text
+XAUUSD, USDJPY, USDCHF, AUDUSD, USDCAD
+```
+
+It does not place orders.
+
+Install/run outline:
+
+1. In MT5, open MetaEditor.
+2. Create a new Expert Advisor named `ExportLiveBars`.
+3. Paste the contents of `mt5/ExportLiveBars.mq5`.
+4. Compile it.
+5. Attach it to any chart while the account is flat.
+6. Confirm MT5 writes `syphonix_mt5_live_bars.csv` in its `MQL5/Files` folder.
+
+After MT5 writes the CSV, merge it with historical bars:
+
+```bash
+.venv/bin/python scripts/build_live_bars_from_mt5.py \
+  --mt5-csv /path/to/syphonix_mt5_live_bars.csv \
+  --output data/live/bars_15min_live.parquet
+```
+
+Then create a fresh manual ticket from the merged live bar file:
+
+```bash
+.venv/bin/python scripts/create_execution_ticket.py \
+  --bars data/live/bars_15min_live.parquet \
+  --config configs/portfolio_guarded.yaml \
+  --symbol-specs configs/mt5_symbol_specs.yaml
+```
+
+Use completed 15-minute candles. The first useful post-launch decision window is
+around `22:16`, then `22:31`, `22:46`, and so on.
+
+To translate a target ticket into netting-mode adjustment orders, pass the
+current MT5 Trade tab positions:
+
+```bash
+.venv/bin/python scripts/create_adjustment_ticket.py \
+  --bars data/live/bars_15min_fx_live.parquet \
+  --config configs/portfolio_fx_live.yaml \
+  --symbol-specs configs/mt5_symbol_specs.yaml \
+  --execution-equity 1000000 \
+  --position USDJPY:sell:21 \
+  --position USDCHF:buy:15 \
+  --position USDCAD:buy:12
+```
+
+If `ADJUSTMENT_PLAN` has no orders, hold. If it has orders, enter only those
+adjustment orders, not the full target ticket.
+
+Important limitation: MT5 M15 candles are treated as bid candles, and the bridge
+approximates ask/mid fields using the current bid/ask spread. This is acceptable
+for a first fresh-signal bridge, but each generated ticket still needs a manual
+sanity check before entry.
 
 ## EA Bridge Decision
 

@@ -14,7 +14,7 @@ import yaml
 from quantbot.execution.adapters import ManualExecutionAdapter
 from quantbot.execution.planner import plan_from_decision, reprice_plan_with_quotes
 from quantbot.execution.sizing import load_symbol_specs
-from quantbot.live.decision import generate_decision_report
+from quantbot.live.decision import generate_decision_report, rescale_decision_report
 
 
 def parse_args() -> argparse.Namespace:
@@ -24,6 +24,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--symbol-specs", type=Path, default=Path("configs/mt5_symbol_specs.yaml"))
     parser.add_argument("--output-dir", type=Path, default=Path("reports/execution_tickets"))
     parser.add_argument("--min-notional-usd", type=float, default=10_000.0)
+    parser.add_argument(
+        "--execution-equity",
+        type=float,
+        default=None,
+        help="Override ticket sizing equity with actual live account equity.",
+    )
     parser.add_argument(
         "--quote",
         action="append",
@@ -62,6 +68,8 @@ def main() -> None:
     live_mid_prices = parse_quotes(args.quote)
 
     report = generate_decision_report(bars, config, config_name=args.config.name)
+    if args.execution_equity is not None:
+        report = rescale_decision_report(report, args.execution_equity)
     plan = plan_from_decision(report, min_notional_usd=args.min_notional_usd)
     repriced = reprice_plan_with_quotes(plan, specs, live_mid_prices)
     receipt = ManualExecutionAdapter(args.output_dir).submit(repriced)
