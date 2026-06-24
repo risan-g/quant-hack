@@ -1,0 +1,43 @@
+# Current best FX/metals research portfolio.
+#
+# This keeps the curated strategy legs and adds only a simple spread guard to
+# momentum/breakout legs. Heavier volatility/trend filters overfit and performed
+# worse in the current data.
+legs:
+  - symbol: XAUUSD
+    strategy: momentum_8
+    weight: 0.30
+    regime:
+      max_spread_z: 2.0
+  - symbol: USDJPY
+    strategy: mean_reversion_8
+    weight: 0.25
+    regime:
+      max_spread_z: 3.0
+  - symbol: USDCHF
+    strategy: momentum_32
+    weight: 0.15
+    regime:
+      max_spread_z: 2.0
+  - symbol: AUDUSD
+    strategy: breakout_32
+    weight: 0.15
+    regime:
+      max_spread_z: 2.0
+  - symbol: USDCAD
+    strategy: momentum_32
+    weight: 0.15
+    regime:
+      max_spread_z: 2.0
+
+risk:
+  base_gross_leverage: 3.0
+  attack_gross_leverage: 4.5
+  defend_gross_leverage: 3.0
+  max_gross_leverage: 6.0
+  soft_drawdown: 0.15
+  hard_drawdown: 0.30
+  attack_drawdown: 0.04
+  recent_loss_window: 16
+  recent_loss_cut: -0.03
+  recovery_bars: 8

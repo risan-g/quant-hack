@@ -24,6 +24,22 @@ symbols:
     min_volume: 0.01
     max_volume: 100
     volume_step: 0.01
+  EURCHF:
+    contract_size: 100000
+    contract_asset: EUR
+    quote_currency: CHF
+    usd_conversion_symbol: EURUSD
+    min_volume: 0.01
+    max_volume: 100
+    volume_step: 0.01
+  EURGBP:
+    contract_size: 100000
+    contract_asset: EUR
+    quote_currency: GBP
+    usd_conversion_symbol: EURUSD
+    min_volume: 0.01
+    max_volume: 100
+    volume_step: 0.01
   GBPUSD:
     contract_size: 100000
     contract_asset: GBP

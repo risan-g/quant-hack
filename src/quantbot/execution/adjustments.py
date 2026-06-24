@@ -11,6 +11,9 @@ class CurrentPosition(BaseModel):
     symbol: str
     side: OrderSide
     volume_lots: float = Field(gt=0)
+    price_open: float | None = None
+    price_current: float | None = None
+    profit: float | None = None
 
     @property
     def signed_volume_lots(self) -> float:
@@ -59,6 +62,10 @@ def adjustment_orders_from_positions(
         if target_order is not None:
             reason = f"{reason}; target reason: {target_order.reason}"
 
+        current_abs = abs(current_volume)
+        target_abs = abs(target_volume)
+        reduce_only = current_abs > 0 and target_abs < current_abs and current_volume * delta < 0
+
         adjustments.append(
             OrderIntent(
                 symbol=symbol,
@@ -67,7 +74,7 @@ def adjustment_orders_from_positions(
                 notional_usd=abs(delta),
                 volume_lots=abs(delta),
                 target_leverage=0.0,
-                reduce_only=False,
+                reduce_only=reduce_only,
                 reason=reason,
             )
         )

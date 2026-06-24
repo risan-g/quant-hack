@@ -24,6 +24,8 @@ class OrderIntent(BaseModel):
     volume_lots: float | None = Field(default=None, ge=0)
     target_leverage: float
     reduce_only: bool = False
+    stop_loss_price: float | None = Field(default=None, gt=0)
+    take_profit_price: float | None = Field(default=None, gt=0)
     reason: str
 
 

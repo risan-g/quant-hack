@@ -17,6 +17,7 @@ from quantbot.execution.models import OrderSide
 from quantbot.execution.planner import plan_from_decision
 from quantbot.execution.sizing import load_symbol_specs
 from quantbot.live.decision import generate_decision_report, rescale_decision_report
+from quantbot.live.mt5_positions import read_mt5_positions_csv
 
 
 def parse_args() -> argparse.Namespace:
@@ -24,7 +25,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bars", type=Path, default=Path("data/live/bars_15min_fx_live.parquet"))
     parser.add_argument("--config", type=Path, default=Path("configs/portfolio_fx_live.yaml"))
     parser.add_argument("--symbol-specs", type=Path, default=Path("configs/mt5_symbol_specs.yaml"))
-    parser.add_argument("--execution-equity", type=float, required=True)
+    parser.add_argument("--execution-equity", type=float, default=None)
+    parser.add_argument(
+        "--positions-csv",
+        type=Path,
+        default=None,
+        help="MT5-exported positions CSV. If provided, positions and equity are read from it.",
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("reports/execution_tickets"))
     parser.add_argument(
         "--position",
@@ -59,10 +66,18 @@ def main() -> None:
     bars = pd.read_parquet(args.bars)
     config = load_config(args.config)
     specs = load_symbol_specs(args.symbol_specs)
-    positions = parse_positions(args.position)
+    if args.positions_csv is not None:
+        snapshot = read_mt5_positions_csv(args.positions_csv)
+        positions = snapshot.positions
+        execution_equity = snapshot.equity if args.execution_equity is None else args.execution_equity
+    else:
+        positions = parse_positions(args.position)
+        if args.execution_equity is None:
+            raise SystemExit("--execution-equity is required unless --positions-csv is provided")
+        execution_equity = args.execution_equity
 
     report = generate_decision_report(bars, config, config_name=args.config.name)
-    report = rescale_decision_report(report, args.execution_equity)
+    report = rescale_decision_report(report, execution_equity)
     target = plan_from_decision(report, symbol_specs=specs)
     adjustment = adjustment_orders_from_positions(target, positions)
 

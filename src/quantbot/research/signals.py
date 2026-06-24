@@ -24,6 +24,9 @@ def add_strategy_positions(group: pd.DataFrame) -> pd.DataFrame:
 
     for window in (4, 8, 16, 32):
         mom = close.pct_change(window)
+        group[f"move_strength_{window}"] = (
+            mom.abs() / group["realized_vol_16"].replace(0.0, np.nan)
+        )
         group[f"momentum_{window}"] = np.sign(mom).fillna(0.0)
 
         rolling_high = close.shift(1).rolling(window).max()
@@ -36,10 +39,28 @@ def add_strategy_positions(group: pd.DataFrame) -> pd.DataFrame:
         rolling_mean = close.shift(1).rolling(window).mean()
         rolling_std = close.shift(1).rolling(window).std(ddof=0)
         zscore = (close - rolling_mean) / rolling_std.replace(0.0, np.nan)
+        group[f"mean_reversion_z_{window}"] = zscore
         mean_revert = pd.Series(0.0, index=group.index)
         mean_revert = mean_revert.mask(zscore > 1.0, -1.0)
         mean_revert = mean_revert.mask(zscore < -1.0, 1.0)
         group[f"mean_reversion_{window}"] = mean_revert.fillna(0.0)
+
+    m15_close = close.copy()
+    m15_close.index = pd.to_datetime(group["time"], utc=True)
+    m15_close = m15_close.resample("15min").last().dropna()
+    m15_ret = m15_close.pct_change()
+    m15_vol = m15_ret.rolling(16).std(ddof=0)
+    for window in (4, 8, 16, 32):
+        m15_mom = m15_close.pct_change(window)
+        m15_signal = np.sign(m15_mom).fillna(0.0)
+        m15_strength = (m15_mom.abs() / m15_vol.replace(0.0, np.nan)).fillna(0.0)
+        original_times = pd.to_datetime(group["time"], utc=True)
+        group[f"m15_momentum_{window}"] = (
+            m15_signal.reindex(original_times, method="ffill").fillna(0.0).to_numpy()
+        )
+        group[f"m15_move_strength_{window}"] = (
+            m15_strength.reindex(original_times, method="ffill").fillna(0.0).to_numpy()
+        )
 
     return group
 

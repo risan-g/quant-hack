@@ -22,8 +22,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--allow-stale-symbols", action="store_true")
     parser.add_argument(
         "--assume-timezone",
-        default="UTC",
-        help="Timezone for naive MT5 timestamps. Use UTC unless MT5 server time is known.",
+        default="Europe/London",
+        help="Timezone for naive MT5 timestamps.",
     )
     return parser.parse_args()
 

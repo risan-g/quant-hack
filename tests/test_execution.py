@@ -78,6 +78,28 @@ def test_lots_for_usdjpy_notional() -> None:
     assert lots_for_notional_usd(spec, notional_usd=1_929_313, mid_price=160) == 19.29
 
 
+def test_lots_for_eurchf_uses_eurusd_conversion() -> None:
+    spec = SymbolSpec(
+        symbol="EURCHF",
+        contract_size=100_000,
+        contract_asset="EUR",
+        quote_currency="CHF",
+        usd_conversion_symbol="EURUSD",
+        min_volume=0.01,
+        max_volume=100,
+        volume_step=0.01,
+    )
+    assert (
+        lots_for_notional_usd(
+            spec,
+            notional_usd=229_000,
+            mid_price=0.92,
+            conversion_mid_prices={"EURUSD": 1.145},
+        )
+        == 2.0
+    )
+
+
 def test_reprice_plan_with_quotes_sets_volume() -> None:
     report = DecisionReport(
         timestamp="2026-06-10T23:45:00+00:00",

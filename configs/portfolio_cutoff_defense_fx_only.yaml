@@ -1,0 +1,28 @@
+# Cutoff-defense live config, FX-only.
+#
+# This removes XAUUSD from live targeting after gold proved too volatile for the
+# current competition workflow. Gross leverage is set so the existing two FX
+# legs stay near their current size instead of forcing an unnecessary scale-up.
+legs:
+  - symbol: USDCHF
+    strategy: momentum_32
+    weight: 0.50
+    regime:
+      max_spread_z: 1.5
+  - symbol: USDCAD
+    strategy: momentum_32
+    weight: 0.50
+    regime:
+      max_spread_z: 1.5
+
+risk:
+  base_gross_leverage: 0.81
+  attack_gross_leverage: 0.81
+  defend_gross_leverage: 0.40
+  max_gross_leverage: 1.00
+  soft_drawdown: 0.04
+  hard_drawdown: 0.08
+  attack_drawdown: 0.0
+  recent_loss_window: 16
+  recent_loss_cut: -0.006
+  recovery_bars: 8

@@ -5,9 +5,10 @@
 
 #property strict
 
-input string SymbolsCsv = "XAUUSD,USDJPY,USDCHF,AUDUSD,USDCAD";
+input string SymbolsCsv = "AUDUSD,EURCHF,EURGBP,EURUSD,GBPUSD,USDCAD,USDCHF,USDJPY,XAGUSD";
 input int BarsToExport = 96;
 input string OutputFile = "syphonix_mt5_live_bars.csv";
+input string PositionsOutputFile = "syphonix_mt5_positions.csv";
 input int TimerSeconds = 30;
 
 string Symbols[];
@@ -30,7 +31,8 @@ int OnInit()
 
    EventSetTimer(TimerSeconds);
    ExportBars();
-   Print("ExportLiveBars: started; writing ", OutputFile);
+   ExportPositions();
+   Print("ExportLiveBars: started; writing ", OutputFile, " and ", PositionsOutputFile);
    return INIT_SUCCEEDED;
 }
 
@@ -43,6 +45,7 @@ void OnDeinit(const int reason)
 void OnTimer()
 {
    ExportBars();
+   ExportPositions();
 }
 
 void ExportBars()
@@ -105,6 +108,97 @@ void ExportBars()
             (long)rates[j].tick_volume
          );
       }
+   }
+
+   FileClose(handle);
+}
+
+void ExportPositions()
+{
+   int handle = FileOpen(PositionsOutputFile, FILE_WRITE | FILE_CSV | FILE_ANSI, ',');
+   if(handle == INVALID_HANDLE)
+   {
+      Print("ExportLiveBars: FileOpen failed for ", PositionsOutputFile, " error=", GetLastError());
+      return;
+   }
+
+   FileWrite(
+      handle,
+      "exported_at",
+      "balance",
+      "equity",
+      "margin",
+      "free_margin",
+      "margin_level",
+      "symbol",
+      "side",
+      "volume",
+      "price_open",
+      "price_current",
+      "profit"
+   );
+
+   string exportedAt = TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS);
+   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+   double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+   double margin = AccountInfoDouble(ACCOUNT_MARGIN);
+   double freeMargin = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
+   double marginLevel = AccountInfoDouble(ACCOUNT_MARGIN_LEVEL);
+   int total = PositionsTotal();
+
+   if(total == 0)
+   {
+      FileWrite(
+         handle,
+         exportedAt,
+         DoubleToString(balance, 2),
+         DoubleToString(equity, 2),
+         DoubleToString(margin, 2),
+         DoubleToString(freeMargin, 2),
+         DoubleToString(marginLevel, 2),
+         "",
+         "flat",
+         "0",
+         "0",
+         "0",
+         "0"
+      );
+      FileClose(handle);
+      return;
+   }
+
+   for(int i = 0; i < total; i++)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0)
+      {
+         continue;
+      }
+
+      string symbol = PositionGetString(POSITION_SYMBOL);
+      long type = PositionGetInteger(POSITION_TYPE);
+      string side = type == POSITION_TYPE_BUY ? "buy" : "sell";
+      double volume = PositionGetDouble(POSITION_VOLUME);
+      double priceOpen = PositionGetDouble(POSITION_PRICE_OPEN);
+      double priceCurrent = PositionGetDouble(POSITION_PRICE_CURRENT);
+      double profit = PositionGetDouble(POSITION_PROFIT);
+      int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+
+      FileWrite(
+         handle,
+         exportedAt,
+         DoubleToString(balance, 2),
+         DoubleToString(equity, 2),
+         DoubleToString(margin, 2),
+         DoubleToString(freeMargin, 2),
+         DoubleToString(marginLevel, 2),
+         symbol,
+         side,
+         DoubleToString(volume, 2),
+         DoubleToString(priceOpen, digits),
+         DoubleToString(priceCurrent, digits),
+         DoubleToString(profit, 2)
+      );
    }
 
    FileClose(handle);

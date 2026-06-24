@@ -128,7 +128,7 @@ opposite direction can reduce, close, or flip the existing position.
 The live data bridge is one-way and non-trading:
 
 ```text
-MT5 completed M15 bars -> CSV file -> Python importer -> fresh manual ticket
+MT5 completed M15 bars + current positions -> CSV files -> Python importer -> fresh manual ticket
 ```
 
 The MT5 exporter file is:
@@ -143,6 +143,12 @@ It exports completed M15 candles for the configured strategy symbols:
 XAUUSD, USDJPY, USDCHF, AUDUSD, USDCAD
 ```
 
+It also exports current MT5 net positions and account state to:
+
+```text
+syphonix_mt5_positions.csv
+```
+
 It does not place orders.
 
 Install/run outline:
@@ -152,7 +158,9 @@ Install/run outline:
 3. Paste the contents of `mt5/ExportLiveBars.mq5`.
 4. Compile it.
 5. Attach it to any chart while the account is flat.
-6. Confirm MT5 writes `syphonix_mt5_live_bars.csv` in its `MQL5/Files` folder.
+6. Confirm MT5 writes these files in its `MQL5/Files` folder:
+   - `syphonix_mt5_live_bars.csv`
+   - `syphonix_mt5_positions.csv`
 
 After MT5 writes the CSV, merge it with historical bars:
 
@@ -191,10 +199,123 @@ current MT5 Trade tab positions:
 If `ADJUSTMENT_PLAN` has no orders, hold. If it has orders, enter only those
 adjustment orders, not the full target ticket.
 
+After the position exporter is installed, the preferred single command is:
+
+```bash
+.venv/bin/python scripts/live_checkpoint.py \
+  --mt5-bars-csv /path/to/syphonix_mt5_live_bars.csv \
+  --mt5-positions-csv /path/to/syphonix_mt5_positions.csv \
+  --config configs/portfolio_guarded.yaml
+```
+
+Read the final `ACTION:` section. It prints either `HOLD` or the exact MT5
+orders to enter manually.
+
+## Dry-Run Proposed Orders
+
+After the position exporter works, the next automation layer is dry-run only:
+
+```text
+Python writes proposed orders -> MT5 reads them -> MT5 logs WOULD BUY/SELL
+```
+
+The MT5 dry-run reader is:
+
+```text
+mt5/DryRunProposedOrders.mq5
+```
+
+It does not place orders.
+
+Install/run outline:
+
+1. In MetaEditor, create a new Expert Advisor named `DryRunProposedOrders`.
+2. Paste the contents of `mt5/DryRunProposedOrders.mq5`.
+3. Compile it.
+4. Attach it to one chart.
+5. Keep Algo Trading enabled, but remember this EA has no trade placement calls.
+
+Run the checkpoint with proposed-order output:
+
+```bash
+.venv/bin/python scripts/live_checkpoint.py \
+  --mt5-bars-csv /path/to/syphonix_mt5_live_bars.csv \
+  --mt5-positions-csv /path/to/syphonix_mt5_positions.csv \
+  --proposed-orders-csv /path/to/syphonix_proposed_orders.csv \
+  --config configs/portfolio_guarded.yaml
+```
+
+Then check the MT5 Experts tab. It should log `WOULD BUY/SELL ...` lines that
+match the Python `ACTION:` section.
+
 Important limitation: MT5 M15 candles are treated as bid candles, and the bridge
 approximates ask/mid fields using the current bid/ask spread. This is acceptable
 for a first fresh-signal bridge, but each generated ticket still needs a manual
 sanity check before entry.
+
+## Tiny-Capped Live EA
+
+The first live executor is intentionally capped and gated:
+
+```text
+mt5/AutoExecuteProposedOrders.mq5
+```
+
+It ignores the proposed-order file that already exists when the EA is attached.
+Only a newly generated file can trigger actions.
+
+Live execution requires all gates to be open:
+
+1. EA input `DryRunMode=false`.
+2. EA input `ArmedForLiveTrading=true`.
+3. The CSV row has `dry_run=false`, generated with `--proposed-live`.
+4. The signal timestamp is not stale.
+5. The symbol is in `AllowedSymbols`.
+6. Each order is capped by `MaxOrderLots`.
+
+Initial live setting should keep `MaxOrderLots=0.10` until the mechanics are
+confirmed in MT5 History and Journal.
+
+Generate a live-proposed file:
+
+```bash
+.venv/bin/python scripts/live_checkpoint.py \
+  --mt5-bars-csv /path/to/syphonix_mt5_live_bars.csv \
+  --mt5-positions-csv /path/to/syphonix_mt5_positions.csv \
+  --proposed-orders-csv /path/to/syphonix_proposed_orders.csv \
+  --proposed-live \
+  --config configs/portfolio_guarded.yaml
+```
+
+## Supervised Auto Checkpoint Loop
+
+The supervised loop can run every few seconds and only writes a proposed-order
+file when a new completed candle produces safe-sized actions:
+
+```bash
+.venv/bin/python scripts/auto_checkpoint_loop.py \
+  --mt5-bars-csv /path/to/syphonix_mt5_live_bars.csv \
+  --mt5-positions-csv /path/to/syphonix_mt5_positions.csv \
+  --proposed-orders-csv /path/to/syphonix_proposed_orders.csv \
+  --mode dry-run
+```
+
+MT5 exports naive timestamps from the terminal/server clock; for launch day this
+workflow treats those timestamps as `Europe/London`.
+
+Switch to `--mode live` only after dry-run logs match expectations. The loop
+does not write live files when:
+
+- `STOP_AUTO_TRADING` exists in the repo root;
+- the MT5 export is stale;
+- the candle was already handled;
+- all actions are tiny churn;
+- any order exceeds `--max-auto-order-lots`, unless `--split-large-orders` is enabled.
+
+For less manual work, use `--split-large-orders`. This keeps each EA order
+capped while allowing the loop to complete a larger target as several chunks.
+Keep `--max-total-action-lots` conservative so one bad checkpoint cannot produce
+an unlimited burst.
 
 ## EA Bridge Decision
 

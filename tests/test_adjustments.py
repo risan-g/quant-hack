@@ -66,3 +66,30 @@ def test_adjustment_orders_close_missing_target_symbol() -> None:
     assert adjustment.orders[0].symbol == "USDCAD"
     assert adjustment.orders[0].side == OrderSide.SELL
     assert adjustment.orders[0].volume_lots == 12
+    assert adjustment.orders[0].reduce_only
+
+
+def test_adjustment_orders_mark_partial_reduction_reduce_only() -> None:
+    target = ExecutionPlan(
+        timestamp="2026-06-21T23:45:00+00:00",
+        equity_usd=1_000_000,
+        gross_leverage=6,
+        orders=[
+            OrderIntent(
+                symbol="USDJPY",
+                side=OrderSide.BUY,
+                notional_usd=600_000,
+                volume_lots=6,
+                target_leverage=0.6,
+                reason="test",
+            )
+        ],
+    )
+    current = [CurrentPosition(symbol="USDJPY", side=OrderSide.BUY, volume_lots=10)]
+
+    adjustment = adjustment_orders_from_positions(target, current)
+
+    assert len(adjustment.orders) == 1
+    assert adjustment.orders[0].side == OrderSide.SELL
+    assert adjustment.orders[0].volume_lots == 4
+    assert adjustment.orders[0].reduce_only

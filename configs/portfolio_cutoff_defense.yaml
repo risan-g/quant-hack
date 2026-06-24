@@ -1,0 +1,33 @@
+# Cutoff-defense live config.
+#
+# Goal: survive Top-100 cutoff with selective exposure, lower churn, and much
+# lower gross leverage than the research/launch config. This intentionally
+# removes AUDUSD and USDJPY for now.
+legs:
+  - symbol: XAUUSD
+    strategy: momentum_8
+    weight: 0.40
+    regime:
+      max_spread_z: 1.5
+  - symbol: USDCHF
+    strategy: momentum_32
+    weight: 0.30
+    regime:
+      max_spread_z: 1.5
+  - symbol: USDCAD
+    strategy: momentum_32
+    weight: 0.30
+    regime:
+      max_spread_z: 1.5
+
+risk:
+  base_gross_leverage: 1.35
+  attack_gross_leverage: 1.35
+  defend_gross_leverage: 0.50
+  max_gross_leverage: 1.50
+  soft_drawdown: 0.04
+  hard_drawdown: 0.08
+  attack_drawdown: 0.0
+  recent_loss_window: 16
+  recent_loss_cut: -0.006
+  recovery_bars: 8

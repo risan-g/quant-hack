@@ -1,0 +1,32 @@
+legs:
+- symbol: USDJPY
+  strategy: mean_reversion_16
+  weight: 0.45
+  regime:
+    max_spread_z: 1.25
+- symbol: USDCHF
+  strategy: momentum_32
+  weight: 0.3520167543006444
+  regime:
+    max_spread_z: 1.25
+- symbol: EURGBP
+  strategy: mean_reversion_32
+  weight: 0.14108038391737257
+  regime:
+    max_spread_z: 1.25
+- symbol: USDCAD
+  strategy: momentum_32
+  weight: 0.05690286178198298
+  regime:
+    max_spread_z: 1.25
+risk:
+  base_gross_leverage: 0.8
+  attack_gross_leverage: 0.8
+  defend_gross_leverage: 0.35
+  max_gross_leverage: 1.0
+  soft_drawdown: 0.04
+  hard_drawdown: 0.08
+  attack_drawdown: 0.0
+  recent_loss_window: 16
+  recent_loss_cut: -0.006
+  recovery_bars: 8

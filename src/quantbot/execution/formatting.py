@@ -32,6 +32,12 @@ def format_manual_ticket(plan: ExecutionPlan) -> str:
 
     for index, order in enumerate(plan.orders, start=1):
         volume = "UNKNOWN" if order.volume_lots is None else f"{order.volume_lots:.2f}"
+        stop_loss = (
+            "NONE" if order.stop_loss_price is None else f"{order.stop_loss_price:.6f}"
+        )
+        take_profit = (
+            "NONE" if order.take_profit_price is None else f"{order.take_profit_price:.6f}"
+        )
         lines.extend(
             [
                 f"### {index}. {order.symbol}",
@@ -41,6 +47,8 @@ def format_manual_ticket(plan: ExecutionPlan) -> str:
                 f"- Order type: `{order.order_type.value}`",
                 f"- Target notional: `${order.notional_usd:,.2f}`",
                 f"- Target leverage: `{order.target_leverage:.2f}x`",
+                f"- Stop loss: `{stop_loss}`",
+                f"- Take profit: `{take_profit}`",
                 f"- Reason: {order.reason}",
                 "",
             ]

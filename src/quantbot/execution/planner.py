@@ -13,6 +13,7 @@ def plan_from_decision(
     symbol_specs: dict[str, SymbolSpec] | None = None,
 ) -> ExecutionPlan:
     orders: list[OrderIntent] = []
+    mid_prices = {leg.symbol: leg.mid_price for leg in report.legs}
     for leg in report.legs:
         if leg.side == "flat":
             continue
@@ -25,7 +26,7 @@ def plan_from_decision(
             spec = symbol_specs.get(leg.symbol)
             if spec is None:
                 raise ValueError(f"Missing symbol spec for {leg.symbol}")
-            volume_lots = lots_for_notional_usd(spec, notional, leg.mid_price)
+            volume_lots = lots_for_notional_usd(spec, notional, leg.mid_price, mid_prices)
             if volume_lots <= 0:
                 continue
         orders.append(
@@ -71,6 +72,7 @@ def reprice_plan_with_quotes(
                         spec,
                         order.notional_usd,
                         mid_price,
+                        mid_prices,
                     )
                 }
             )

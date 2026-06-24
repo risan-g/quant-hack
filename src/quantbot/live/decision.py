@@ -58,6 +58,92 @@ def side_from_signal(signal: float) -> Side:
     return "flat"
 
 
+def strategy_window(strategy: str) -> int | None:
+    try:
+        return int(strategy.rsplit("_", 1)[1])
+    except (IndexError, ValueError):
+        return None
+
+
+def m15_trend_bias(
+    group: pd.DataFrame,
+    fast_span: int = 12,
+    slow_span: int = 48,
+) -> pd.Series:
+    """Approximate higher-timeframe trend from M5 bars resampled to M15."""
+    if group.empty:
+        return pd.Series(0.0, index=group.index)
+
+    indexed = group.sort_values("time").set_index("time")
+    m15_close = indexed["mid_close"].resample("15min").last().dropna()
+    if len(m15_close) < slow_span:
+        return pd.Series(0.0, index=group.index)
+
+    fast = m15_close.ewm(span=fast_span, adjust=False, min_periods=fast_span).mean()
+    slow = m15_close.ewm(span=slow_span, adjust=False, min_periods=slow_span).mean()
+    bias = (fast - slow).apply(lambda value: 1.0 if value > 0 else (-1.0 if value < 0 else 0.0))
+    aligned = bias.reindex(indexed.index, method="ffill").fillna(0.0)
+    return pd.Series(aligned.to_numpy(), index=group.sort_values("time").index)
+
+
+def high_conviction_mask(group: pd.DataFrame, strategy: str, rules: dict[str, Any] | None) -> pd.Series:
+    """Return True where a configured signal is strong enough to execute live."""
+    mask = pd.Series(True, index=group.index)
+    if not rules:
+        return mask
+
+    window = strategy_window(strategy)
+    if window is None:
+        return mask
+
+    if "min_abs_move_strength" in rules and strategy.startswith(
+        ("momentum", "breakout", "m15_momentum")
+    ):
+        column = (
+            f"m15_move_strength_{window}"
+            if strategy.startswith("m15_momentum")
+            else f"move_strength_{window}"
+        )
+        if column in group:
+            mask &= group[column].fillna(0.0) >= float(rules["min_abs_move_strength"])
+
+    if "min_abs_reversion_z" in rules and strategy.startswith("mean_reversion"):
+        column = f"mean_reversion_z_{window}"
+        if column in group:
+            mask &= group[column].abs().fillna(0.0) >= float(rules["min_abs_reversion_z"])
+
+    if "min_tick_volume_mult" in rules and "ticks" in group:
+        median_ticks = group["ticks"].rolling(20).median()
+        mask &= group["ticks"].fillna(0.0) >= median_ticks.fillna(float("inf")) * float(
+            rules["min_tick_volume_mult"]
+        )
+
+    if "min_vol_ratio" in rules and "vol_ratio_16_64" in group:
+        mask &= group["vol_ratio_16_64"].fillna(0.0) >= float(rules["min_vol_ratio"])
+
+    if "session_utc" in rules:
+        session_mask = pd.Series(False, index=group.index)
+        hours = pd.to_datetime(group["time"], utc=True).dt.hour
+        for window in rules["session_utc"]:
+            start, end = int(window[0]), int(window[1])
+            if start <= end:
+                session_mask |= (hours >= start) & (hours < end)
+            else:
+                session_mask |= (hours >= start) | (hours < end)
+        mask &= session_mask
+
+    if rules.get("require_m15_trend_align"):
+        bias = m15_trend_bias(
+            group,
+            fast_span=int(rules.get("m15_ema_fast", 12)),
+            slow_span=int(rules.get("m15_ema_slow", 48)),
+        )
+        signal = group[strategy].fillna(0.0)
+        mask &= (signal == 0.0) | (bias == 0.0) | (signal * bias > 0.0)
+
+    return mask
+
+
 def build_decision_inputs(bars: pd.DataFrame, legs: list[dict[str, Any]]) -> BuiltDecisionInputs:
     enriched = build_enriched_bars(bars)
     aligned = build_unit_returns(enriched, legs)
@@ -88,7 +174,8 @@ def generate_decision_report(
             raise ValueError(f"No data available for {symbol}")
         latest = group.iloc[-1]
         raw_signal = float(latest[strategy])
-        allowed = bool(regime_mask(group, leg.get("regime")).iloc[-1])
+        rules = leg.get("regime")
+        allowed = bool((regime_mask(group, rules) & high_conviction_mask(group, strategy, rules)).iloc[-1])
         filtered_signal = raw_signal if allowed else 0.0
         target_leverage = risk_state.gross_leverage * weight * filtered_signal
         target_notional = risk_state.equity * target_leverage
