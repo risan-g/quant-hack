@@ -1,8 +1,0 @@
-              variant  periods   return  max_drawdown   sharpe  mean_return  std_return   utility  final_equity  avg_gross_leverage  max_gross_leverage  min_gross_leverage
-momentum_spread_guard   2311.0 0.518253      0.184092 0.030483     0.000203    0.006658  0.379586  1.518253e+06           12.468631                22.0                 2.0
-       mr_trend_guard   2311.0 0.353533      0.179345 0.023359     0.000152    0.006523  0.199429  1.353533e+06           12.232334                22.0                 2.0
-          spread_only   2311.0 0.316963      0.187062 0.021508     0.000141    0.006537  0.147659  1.316963e+06           12.168548                22.0                 2.0
-                 none   2311.0 0.317059      0.195969 0.021852     0.000140    0.006393  0.137654  1.317059e+06           11.809848                22.0                 2.0
-            loose_vol   2311.0 0.143706      0.152773 0.012456     0.000078    0.006260 -0.009892  1.143706e+06           12.971874                22.0                 2.0
-
-Wrote reports/regime_sweep.csv

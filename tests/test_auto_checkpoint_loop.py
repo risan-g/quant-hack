@@ -9,7 +9,9 @@ from scripts.auto_checkpoint_loop import (
     split_large_orders,
 )
 from scripts.auto_m5_checkpoint_loop import (
+    acknowledge_pending_live_write,
     apply_position_exit_guards,
+    apply_symbol_cooldowns,
     attach_order_protection,
     require_confirmed_entries,
 )
@@ -339,6 +341,81 @@ def test_attach_order_protection_adds_atr_stop_and_take_profit() -> None:
     assert order.take_profit_price > rows[-1]["ask_close"]
 
 
+def test_acknowledge_pending_live_write_blocks_unreflected_orders() -> None:
+    state = {
+        "pending_live_write": {
+            "written_at": "2026-06-22T17:15:00+00:00",
+            "candle_timestamp": "2026-06-22T17:15:00+00:00",
+            "expected_positions": {"USDCHF": 2.0},
+        }
+    }
+    snapshot = SimpleNamespace(positions=[])
+
+    decision, changed = acknowledge_pending_live_write(state, snapshot, ack_timeout_seconds=0)
+
+    assert decision is not None
+    assert decision.status == "ACK_BLOCKED"
+    assert not changed
+    assert "pending_live_write" in state
+
+
+def test_acknowledge_pending_live_write_clears_when_positions_match() -> None:
+    state = {
+        "pending_live_write": {
+            "written_at": "2026-06-22T17:15:00+00:00",
+            "candle_timestamp": "2026-06-22T17:15:00+00:00",
+            "expected_positions": {"USDCHF": 2.0},
+        }
+    }
+    snapshot = SimpleNamespace(
+        positions=[CurrentPosition(symbol="USDCHF", side=OrderSide.BUY, volume_lots=2.0)]
+    )
+
+    decision, changed = acknowledge_pending_live_write(state, snapshot, ack_timeout_seconds=0)
+
+    assert decision is None
+    assert changed
+    assert "pending_live_write" not in state
+
+
+def test_symbol_cooldown_blocks_entries_but_allows_reductions() -> None:
+    state = {
+        "symbol_cooldowns": {
+            "USDCHF": {"bars_remaining": 3, "last_candle": "2026-06-22T17:15:00+00:00"}
+        }
+    }
+    snapshot = SimpleNamespace(
+        positions=[CurrentPosition(symbol="USDCHF", side=OrderSide.BUY, volume_lots=1.0)]
+    )
+    entry_plan = ExecutionPlan(
+        timestamp="2026-06-22T17:20:00+00:00",
+        equity_usd=973_000,
+        gross_leverage=1.0,
+        orders=[
+            OrderIntent(
+                symbol="USDCHF",
+                side=OrderSide.BUY,
+                notional_usd=1.0,
+                volume_lots=1.0,
+                target_leverage=0.0,
+                reason="increase",
+            )
+        ],
+    )
+    reduce_plan = entry_plan.model_copy(
+        update={
+            "orders": [
+                entry_plan.orders[0].model_copy(
+                    update={"side": OrderSide.SELL, "reason": "reduce"}
+                )
+            ]
+        }
+    )
+
+    assert apply_symbol_cooldowns(entry_plan, snapshot, state).orders == []
+    assert apply_symbol_cooldowns(reduce_plan, snapshot, state).orders == reduce_plan.orders
+
+
 def test_position_exit_time_stop_counts_completed_candles_only() -> None:
     state = {}
     snapshot = SimpleNamespace(
@@ -354,10 +431,10 @@ def test_position_exit_time_stop_counts_completed_candles_only() -> None:
     plan = make_plan(0.5)
     plan = plan.model_copy(update={"orders": []})
 
-    first, _ = apply_position_exit_guards(plan, snapshot, state, 1, 1500, 500, 100, 300)
-    same_candle, _ = apply_position_exit_guards(plan, snapshot, state, 1, 1500, 500, 100, 300)
+    first, _ = apply_position_exit_guards(plan, snapshot, state, 1, 1500, 500, 100, 300, 900, 0.33, 500, 6)
+    same_candle, _ = apply_position_exit_guards(plan, snapshot, state, 1, 1500, 500, 100, 300, 900, 0.33, 500, 6)
     next_plan = plan.model_copy(update={"timestamp": "2026-06-22T17:20:00+00:00"})
-    next_candle, _ = apply_position_exit_guards(next_plan, snapshot, state, 1, 1500, 500, 100, 300)
+    next_candle, _ = apply_position_exit_guards(next_plan, snapshot, state, 1, 1500, 500, 100, 300, 900, 0.33, 500, 6)
 
     assert first.orders == []
     assert same_candle.orders == []
@@ -389,9 +466,44 @@ def test_position_exit_profit_lock_closes_after_giveback() -> None:
     )
     plan = make_plan(0.5).model_copy(update={"orders": []})
 
-    guarded, changed = apply_position_exit_guards(plan, snapshot, state, 8, 1500, 500, 100, 300)
+    guarded, changed = apply_position_exit_guards(plan, snapshot, state, 8, 1500, 500, 100, 300, 900, 0.33, 500, 6)
 
     assert changed
     assert len(guarded.orders) == 1
     assert guarded.orders[0].side == OrderSide.SELL
     assert "Profit lock stop" in guarded.orders[0].reason
+
+
+def test_position_exit_scales_winner_once() -> None:
+    state = {
+        "position_seen": {
+            "USDCHF": {
+                "key": "USDCHF:buy:3.00",
+                "bars": 2,
+                "last_candle": "2026-06-22T17:15:00+00:00",
+                "max_profit": 950.0,
+                "last_profit": 950.0,
+                "scaled_once": False,
+            }
+        }
+    }
+    snapshot = SimpleNamespace(
+        positions=[
+            CurrentPosition(
+                symbol="USDCHF",
+                side=OrderSide.BUY,
+                volume_lots=3.0,
+                profit=950.0,
+            )
+        ]
+    )
+    plan = make_plan(0.5).model_copy(update={"orders": []})
+
+    guarded, changed = apply_position_exit_guards(plan, snapshot, state, 8, 1500, 500, 100, 300, 900, 0.33, 500, 6)
+
+    assert changed
+    assert len(guarded.orders) == 1
+    assert guarded.orders[0].reduce_only
+    assert guarded.orders[0].volume_lots == 0.99
+    assert "Partial winner lock" in guarded.orders[0].reason
+    assert state["position_seen"]["USDCHF"]["scaled_once"]

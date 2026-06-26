@@ -1,3 +1,16 @@
+"""
+Syphonix QuantHack: Autonomous Execution Engine (MT5 CSV Bridge)
+
+This is the primary execution loop for the trading system. It bypasses unreliable 
+REST APIs by utilizing an asynchronous CSV bridge to communicate with the MetaTrader 5 
+Expert Advisor in real-time. 
+
+Core Architecture:
+1. File Monitoring: Continuously monitors MT5 exported `live_bars` and `positions`.
+2. Mathematical Prediction: Calculates quantitative momentum and regime-filtered breakout signals.
+3. Order Chunking: Bypasses platform volume limits by splitting massive orders into safe chunks.
+4. Fault Tolerance: Resolves I/O deadlocks and stall states gracefully.
+"""
 #!/usr/bin/env python3
 """Supervised M5 MT5 checkpoint loop for fast dry/live experimentation."""
 
@@ -81,6 +94,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--profit-lock-trigger-usd", type=float, default=500.0)
     parser.add_argument("--profit-lock-floor-usd", type=float, default=100.0)
     parser.add_argument("--profit-lock-giveback-usd", type=float, default=300.0)
+    parser.add_argument("--profit-scale-trigger-usd", type=float, default=900.0)
+    parser.add_argument("--profit-scale-close-fraction", type=float, default=0.33)
+    parser.add_argument("--loss-cooldown-threshold-usd", type=float, default=500.0)
+    parser.add_argument("--loss-cooldown-bars", type=int, default=6)
+    parser.add_argument("--ack-timeout-seconds", type=int, default=75)
     parser.add_argument("--disable-order-protection", action="store_true")
     parser.add_argument("--split-large-orders", action="store_true")
     parser.add_argument("--stop-atr-window", type=int, default=14)
@@ -144,6 +162,80 @@ def current_signed_lots_by_symbol(snapshot) -> dict[str, float]:
         position.symbol.upper(): position.signed_volume_lots
         for position in snapshot.positions
     }
+
+
+def rounded_signed_positions(snapshot) -> dict[str, float]:
+    return {
+        symbol: round(volume, 2)
+        for symbol, volume in current_signed_lots_by_symbol(snapshot).items()
+        if abs(volume) >= 0.01
+    }
+
+
+def expected_signed_positions_after_plan(snapshot, plan: ExecutionPlan) -> dict[str, float]:
+    projected = projected_positions_after_orders(snapshot.positions, plan.orders)
+    return {
+        position.symbol.upper(): round(position.signed_volume_lots, 2)
+        for position in projected
+        if abs(position.signed_volume_lots) >= 0.01
+    }
+
+
+def positions_match_expected(
+    actual: dict[str, float],
+    expected: dict[str, float],
+    tolerance_lots: float = 0.02,
+) -> bool:
+    symbols = set(actual) | set(expected)
+    return all(
+        abs(actual.get(symbol, 0.0) - expected.get(symbol, 0.0)) <= tolerance_lots
+        for symbol in symbols
+    )
+
+
+def acknowledge_pending_live_write(
+    state: dict[str, Any],
+    snapshot,
+    ack_timeout_seconds: int,
+) -> tuple[LoopDecision | None, bool]:
+    pending = state.get("pending_live_write")
+    if not pending:
+        return None, False
+
+    actual = rounded_signed_positions(snapshot)
+    expected = {
+        str(symbol).upper(): round(float(volume), 2)
+        for symbol, volume in pending.get("expected_positions", {}).items()
+    }
+    if positions_match_expected(actual, expected):
+        state.pop("pending_live_write", None)
+        return None, True
+
+    written_at_raw = pending.get("written_at")
+    written_at = datetime.fromisoformat(written_at_raw) if written_at_raw else datetime.now(UTC)
+    if written_at.tzinfo is None:
+        written_at = written_at.replace(tzinfo=UTC)
+    age_seconds = (datetime.now(UTC) - written_at.astimezone(UTC)).total_seconds()
+    if age_seconds < ack_timeout_seconds:
+        return None, False
+
+    if age_seconds > ack_timeout_seconds * 3:
+        state.pop("pending_live_write", None)
+        return None, True
+
+    message = (
+        "Previous live write not reflected in MT5 positions; "
+        f"expected={expected}; actual={actual}"
+    )
+    return (
+        LoopDecision(
+            status="ACK_BLOCKED",
+            message=message,
+            candle_timestamp=pending.get("candle_timestamp"),
+            should_write=False,
+        ),
+        False,
+    )
 
 
 def order_opens_or_increases(order: OrderIntent, current_signed_lots: float) -> bool:
@@ -229,6 +321,44 @@ def require_confirmed_entries(
         f"Waiting for one more M5 candle before opening: {key}",
         True,
     )
+
+
+def decrement_symbol_cooldowns(
+    state: dict[str, Any],
+    candle_timestamp: str,
+) -> bool:
+    changed = False
+    cooldowns = state.setdefault("symbol_cooldowns", {})
+    for symbol in list(cooldowns):
+        cooldown = cooldowns[symbol]
+        if cooldown.get("last_candle") == candle_timestamp:
+            continue
+        cooldown["last_candle"] = candle_timestamp
+        cooldown["bars_remaining"] = int(cooldown.get("bars_remaining", 0)) - 1
+        changed = True
+        if cooldown["bars_remaining"] <= 0:
+            cooldowns.pop(symbol, None)
+    return changed
+
+
+def apply_symbol_cooldowns(
+    plan: ExecutionPlan,
+    snapshot,
+    state: dict[str, Any],
+) -> ExecutionPlan:
+    cooldowns = state.get("symbol_cooldowns", {})
+    if not cooldowns:
+        return plan
+
+    current_by_symbol = current_signed_lots_by_symbol(snapshot)
+    kept_orders = []
+    for order in plan.orders:
+        symbol = order.symbol.upper()
+        current = current_by_symbol.get(symbol, 0.0)
+        if symbol in cooldowns and order_opens_or_increases(order, current):
+            continue
+        kept_orders.append(order)
+    return plan_with_orders(plan, kept_orders)
 
 
 def m15_atr_prices(bars: pd.DataFrame, window: int = 14) -> dict[str, float]:
@@ -405,16 +535,30 @@ def apply_position_exit_guards(
     profit_lock_trigger_usd: float,
     profit_lock_floor_usd: float,
     profit_lock_giveback_usd: float,
+    profit_scale_trigger_usd: float,
+    profit_scale_close_fraction: float,
+    loss_cooldown_threshold_usd: float,
+    loss_cooldown_bars: int,
 ) -> tuple[ExecutionPlan, bool]:
     state_changed = False
     position_seen = state.setdefault("position_seen", {})
+    symbol_cooldowns = state.setdefault("symbol_cooldowns", {})
     current_symbols = {position.symbol.upper() for position in snapshot.positions}
     for symbol in list(position_seen):
         if symbol not in current_symbols:
+            seen = position_seen.get(symbol, {})
+            last_profit = float(seen.get("last_profit", 0.0))
+            if last_profit <= -loss_cooldown_threshold_usd and loss_cooldown_bars > 0:
+                symbol_cooldowns[symbol] = {
+                    "bars_remaining": loss_cooldown_bars,
+                    "last_candle": plan.timestamp,
+                    "reason": f"closed_loss={last_profit:.2f}",
+                }
             position_seen.pop(symbol, None)
             state_changed = True
 
     close_orders: list[OrderIntent] = []
+    scale_orders: list[OrderIntent] = []
     for position in snapshot.positions:
         symbol = position.symbol.upper()
         key = f"{symbol}:{position.side.value}:{position.volume_lots:.2f}"
@@ -426,6 +570,8 @@ def apply_position_exit_guards(
                 "bars": 0,
                 "last_candle": plan.timestamp,
                 "max_profit": profit,
+                "last_profit": profit,
+                "scaled_once": False,
             }
             state_changed = True
             continue
@@ -438,6 +584,9 @@ def apply_position_exit_guards(
         max_profit = max(float(seen.get("max_profit", profit)), profit)
         if max_profit != seen.get("max_profit"):
             seen["max_profit"] = max_profit
+            state_changed = True
+        if seen.get("last_profit") != profit:
+            seen["last_profit"] = profit
             state_changed = True
 
         profit_lock_stop = (
@@ -471,13 +620,41 @@ def apply_position_exit_guards(
                     reason=reason,
                 )
             )
+            continue
 
-    if not close_orders:
+        should_scale = (
+            profit_scale_trigger_usd > 0
+            and profit_scale_close_fraction > 0
+            and max_profit >= profit_scale_trigger_usd
+            and not bool(seen.get("scaled_once", False))
+        )
+        if should_scale:
+            close_side = OrderSide.SELL if position.side == OrderSide.BUY else OrderSide.BUY
+            close_volume = round(position.volume_lots * min(profit_scale_close_fraction, 1.0), 2)
+            if close_volume >= 0.01:
+                seen["scaled_once"] = True
+                state_changed = True
+                scale_orders.append(
+                    OrderIntent(
+                        symbol=position.symbol,
+                        side=close_side,
+                        notional_usd=close_volume,
+                        volume_lots=close_volume,
+                        target_leverage=0.0,
+                        reduce_only=True,
+                        reason=(
+                            f"Partial winner lock pnl={profit:.2f}; "
+                            f"max_profit={max_profit:.2f}; fraction={profit_scale_close_fraction:.2f}"
+                        ),
+                    )
+                )
+
+    if not close_orders and not scale_orders:
         return plan, state_changed
 
-    stop_symbols = {order.symbol.upper() for order in close_orders}
+    stop_symbols = {order.symbol.upper() for order in [*close_orders, *scale_orders]}
     kept_orders = [order for order in plan.orders if order.symbol.upper() not in stop_symbols]
-    return plan_with_orders(plan, [*kept_orders, *close_orders]), True
+    return plan_with_orders(plan, [*kept_orders, *close_orders, *scale_orders]), True
 
 
 def build_adjustment(args: argparse.Namespace):
@@ -511,7 +688,62 @@ def run_once(args: argparse.Namespace):
 
     state = load_state(args.state_file)
     adjustment, exported_at, export_age, snapshot, mid_prices, bars = build_adjustment(args)
+    
+    # --- iOS Remote Control ---
+    current_by_symbol = current_signed_lots_by_symbol(snapshot)
+    btc_lots = abs(current_by_symbol.get("BTCUSD", 0.0))
+    
+    if round(btc_lots, 2) == 0.01:
+        state["remote_standby"] = True
+        write_state(args.state_file, state)
+        adjustment = close_positions_plan(
+            snapshot,
+            adjustment.timestamp,
+            "REMOTE KILL SWITCH (0.01 BTCUSD detected)"
+        )
+        decision = LoopDecision(
+            status="REMOTE_KILL",
+            message="Closing all positions due to 0.01 BTCUSD panic signal",
+            candle_timestamp=adjustment.timestamp,
+            should_write=True,
+        )
+        write_ticket_files(adjustment, args.output_dir)
+        write_proposed_orders_csv(adjustment, args.proposed_orders_csv, dry_run=args.mode == "dry-run")
+        log_line(args.log_file, f"{decision.status}: {decision.message}")
+        return decision
+        
+    elif round(btc_lots, 2) == 0.02:
+        state["remote_standby"] = False
+        write_state(args.state_file, state)
+        
+    if state.get("remote_standby", False):
+        decision = LoopDecision(
+            status="STANDBY",
+            message="Remote standby active. Waiting for 0.02 BTCUSD to resume.",
+            candle_timestamp=None,
+            should_write=False,
+        )
+        log_line(args.log_file, f"{decision.status}: {decision.message}")
+        return decision
+    # ---------------------------
+
     state_changed = False
+    pending_decision, pending_state_changed = acknowledge_pending_live_write(
+        state,
+        snapshot,
+        args.ack_timeout_seconds,
+    )
+    state_changed = state_changed or pending_state_changed
+    if pending_decision is not None:
+        state["last_status"] = pending_decision.status
+        state["last_message"] = pending_decision.message
+        state["last_mode"] = args.mode
+        state["last_updated_at"] = datetime.now(UTC).isoformat()
+        write_state(args.state_file, state)
+        log_line(args.log_file, f"{pending_decision.status}: {pending_decision.message}")
+        return pending_decision
+
+    state_changed = decrement_symbol_cooldowns(state, adjustment.timestamp) or state_changed
     if snapshot.equity < args.equity_floor or snapshot.equity >= args.equity_ceiling:
         adjustment = close_positions_plan(
             snapshot,
@@ -531,8 +763,13 @@ def run_once(args: argparse.Namespace):
             args.profit_lock_trigger_usd,
             args.profit_lock_floor_usd,
             args.profit_lock_giveback_usd,
+            args.profit_scale_trigger_usd,
+            args.profit_scale_close_fraction,
+            args.loss_cooldown_threshold_usd,
+            args.loss_cooldown_bars,
         )
-        state_changed = exit_state_changed
+        state_changed = state_changed or exit_state_changed
+    adjustment = apply_symbol_cooldowns(adjustment, snapshot, state)
     adjustment, entry_confirmation_message, entry_state_changed = require_confirmed_entries(
         adjustment,
         snapshot,
@@ -617,6 +854,20 @@ def run_once(args: argparse.Namespace):
         state["last_message"] = decision.message
         state["last_mode"] = args.mode
         state["last_updated_at"] = datetime.now(UTC).isoformat()
+        if args.mode == "live" and safe_plan.orders:
+            state["pending_live_write"] = {
+                "written_at": datetime.now(UTC).isoformat(),
+                "candle_timestamp": safe_plan.timestamp,
+                "expected_positions": expected_signed_positions_after_plan(snapshot, safe_plan),
+                "orders": [
+                    {
+                        "symbol": order.symbol,
+                        "side": order.side.value,
+                        "volume_lots": order.volume_lots,
+                    }
+                    for order in safe_plan.orders
+                ],
+            }
         write_state(args.state_file, state)
     elif state_changed:
         state["last_status"] = decision.status

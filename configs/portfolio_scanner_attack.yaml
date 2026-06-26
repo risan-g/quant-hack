@@ -9,8 +9,8 @@ legs:
     max_lots: 10.0
     regime:
       max_spread_z: 1.25
-      min_abs_reversion_z: 1.60
-      min_vol_ratio: 0.55
+      min_abs_reversion_z: 1.20
+      min_vol_ratio: 0.40
       m15_ema_fast: 12
       m15_ema_slow: 48
   - symbol: EURUSD
@@ -19,8 +19,8 @@ legs:
     max_lots: 10.0
     regime:
       max_spread_z: 1.20
-      min_abs_reversion_z: 1.60
-      min_vol_ratio: 0.55
+      min_abs_reversion_z: 1.20
+      min_vol_ratio: 0.40
       m15_ema_fast: 12
       m15_ema_slow: 48
   - symbol: GBPUSD
@@ -29,8 +29,8 @@ legs:
     max_lots: 10.0
     regime:
       max_spread_z: 1.25
-      min_abs_move_strength: 2.25
-      min_vol_ratio: 0.60
+      min_abs_move_strength: 1.50
+      min_vol_ratio: 0.45
       require_m15_trend_align: true
       m15_ema_fast: 12
       m15_ema_slow: 48
@@ -40,8 +40,8 @@ legs:
     max_lots: 10.0
     regime:
       max_spread_z: 1.25
-      min_abs_move_strength: 2.25
-      min_vol_ratio: 0.60
+      min_abs_move_strength: 1.50
+      min_vol_ratio: 0.45
       require_m15_trend_align: true
       m15_ema_fast: 12
       m15_ema_slow: 48
@@ -51,17 +51,17 @@ legs:
     max_lots: 1.00
     regime:
       max_spread_z: 1.50
-      min_abs_move_strength: 2.50
-      min_vol_ratio: 0.70
+      min_abs_move_strength: 1.75
+      min_vol_ratio: 0.50
       require_m15_trend_align: true
       m15_ema_fast: 12
       m15_ema_slow: 48
 
 risk:
-  base_gross_leverage: 6.0
-  attack_gross_leverage: 9.0
+  base_gross_leverage: 10.0
+  attack_gross_leverage: 16.0
   defend_gross_leverage: 2.0
-  max_gross_leverage: 12.0
+  max_gross_leverage: 20.0
   soft_drawdown: 0.08
   hard_drawdown: 0.15
   attack_drawdown: 0.02

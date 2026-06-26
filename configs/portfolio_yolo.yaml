@@ -21,9 +21,9 @@ legs:
 
 risk:
   base_gross_leverage: 20.0
-  attack_gross_leverage: 29.5
+  attack_gross_leverage: 27.5
   defend_gross_leverage: 2.0
-  max_gross_leverage: 29.5
+  max_gross_leverage: 27.5
   soft_drawdown: 0.20
   hard_drawdown: 0.35
   attack_drawdown: 0.05

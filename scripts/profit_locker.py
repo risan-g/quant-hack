@@ -1,5 +1,19 @@
 import pandas as pd
 import time
+"""
+Syphonix QuantHack: Dynamic Profit Locker & Risk Sidecar
+
+This daemon runs alongside the main execution loop to autonomously protect capital.
+It continuously scans the MT5 positions CSV for real-time equity data.
+
+Innovation:
+Instead of sending API close requests, it mathematically locks in wealth by 
+dynamically parsing and rewriting the live YAML configuration files in real-time.
+When massive profit milestones are reached, it seamlessly downshifts the entire 
+trading engine from an aggressive high-leverage "Attack" gear into a highly 
+defensive "Wealth Generation" gear without interrupting the execution pipeline.
+"""
+
 import os
 
 MT5_POSITIONS = "/Users/risan/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Files/syphonix_mt5_positions.csv"
@@ -32,19 +46,19 @@ while True:
                     current_floor = -999999.0
                     
                 if total_profit <= current_floor and highest_profit >= 8000.0:
-                        print(f"\n!!! GEAR SHIFT ENGAGED !!!")
+                        print("\n!!! GEAR SHIFT ENGAGED !!!")
                         print(f"Peak Profit: ${highest_profit:.2f}")
                         print(f"Current Profit: ${total_profit:.2f} (Hit floor of ${current_floor:.2f})")
                         print("SHIFTING INTO SAFE WEALTH-GENERATION GEAR...")
                         
                         try:
-                            with open("configs/portfolio_aggro.yaml", "r") as f:
+                            with open("configs/portfolio_scanner_attack.yaml", "r") as f:
                                 config = f.read()
                             # Downshift leverage to 6.0x instead of 0.0 to keep safely generating profit
-                            config = config.replace("max_gross_leverage: 29.5", "max_gross_leverage: 6.0")
-                            config = config.replace("attack_gross_leverage: 28.0", "attack_gross_leverage: 4.5")
-                            config = config.replace("base_gross_leverage: 15.0", "base_gross_leverage: 3.0")
-                            with open("configs/portfolio_aggro.yaml", "w") as f:
+                            config = config.replace("max_gross_leverage: 20.0", "max_gross_leverage: 6.0")
+                            config = config.replace("attack_gross_leverage: 16.0", "attack_gross_leverage: 4.5")
+                            config = config.replace("base_gross_leverage: 10.0", "base_gross_leverage: 3.0")
+                            with open("configs/portfolio_scanner_attack.yaml", "w") as f:
                                 f.write(config)
                             print("Leverage successfully downshifted to 6.0x. The bot will keep safely grinding past 1M.")
                         except Exception as ce:

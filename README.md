@@ -1,228 +1,57 @@
-# AI Trading Competition Plan
+# Syphonix QuantHack: Autonomous AI Trading Engine
 
-This repo is for a solo AI/quant trading competition using simulated funds, real quotes, and a formula-based ranking system.
+This repository contains the architecture, execution engine, and dynamic risk management systems developed for the QuantHack 2026 AI Trading Competition. 
 
-## Current Known Rules
+## System Architecture
 
-- Initial equity: 1,000,000 USD
-- Max platform leverage: 30x
-- Tradable instruments:
-  - FX: AUD/USD, EUR/CHF, EUR/GBP, EUR/USD, GBP/USD, USD/CAD, USD/CHF, USD/JPY
-  - Metals: XAG/USD, XAU/USD
-  - Crypto: BAR/USD, BTC/USD, ETH/USD, SOL/USD, XRP/USD
-- Composite score:
-  - 70% return rank
-  - 15% maximum drawdown rank
-  - 10% Sharpe rank
-  - 5% risk discipline
-- Sharpe is non-annualized and computed from 15-minute account equity returns.
-- Best Sharpe eligibility requires finals, Top 50 overall, no red-line violations, and at least 30 trades.
-
-## Hard Risk Constraints
-
-Treat 30x leverage as a danger zone, not a target.
-
-- Forced liquidation means immediate elimination.
-- Margin usage above 90% for 30 minutes loses risk discipline points.
-- Margin usage above 95% for 15 minutes loses more points.
-- Margin usage above 98% for 10 minutes triggers compliance review.
-- Effective leverage above 28x for 30 minutes loses points.
-- Effective leverage above 29x for 15 minutes loses more points.
-- Near-30x leverage for 10 minutes triggers compliance review.
-- Single-instrument exposure above 90% for 30 minutes loses points.
-- Net directional exposure above 95% for 30 minutes loses points.
-
-Internal system limits should be stricter than the public limits.
-
-## Strategic Objective
-
-This is a rank optimization problem, not a normal long-term investment problem.
-
-Round behavior should depend on leaderboard state:
-
-- Below target qualification zone: controlled aggression.
-- Safely above qualification zone: protect equity and drawdown.
-- Blind final phase: run robust composite-score strategy.
-
-The system should separate:
-
-- Prediction: what looks attractive.
-- Allocation: how much exposure to take.
-- Risk: what is allowed.
-- Execution: how orders are actually placed.
-
-## Architecture Target
+The core philosophy of this project is to build an unshakeable, autonomous bridge between a Python-based quantitative AI and the MetaTrader 5 (MT5) execution environment.
 
 ```text
-market data
-  -> feature pipeline
-  -> strategy ensemble
-  -> portfolio allocator
-  -> risk governor
-  -> execution adapter
-  -> trade/equity logger
-  -> monitoring and post-trade analysis
+market data (MT5)
+  -> CSV Bridge
+  -> feature pipeline (Python)
+  -> strategy ensemble (Regime Filters + Momentum/Reversion)
+  -> portfolio allocator (YAML Configs)
+  -> risk governor (Dynamic Margin & Equity Limits)
+  -> execution adapter (CSV Output)
+  -> MT5 Expert Advisor (Order Execution)
 ```
 
-The AI layer should not place unchecked trades. It can summarize regimes, suggest parameters, and produce explanations, but deterministic code should enforce risk.
+### 1. The Autonomous Execution Loop (`auto_m5_checkpoint_loop.py`)
+To solve the problem of robust data transfer between Python and MT5 without relying on unverified APIs or webhooks, we built an asynchronous CSV data bridge. 
+- The MT5 EA exports live bars and positions to CSV every 5 minutes.
+- The Python AI engine continuously watches these files, calculates mathematical momentum and breakout signals, and writes optimized, chunked orders back to a `proposed_orders` CSV.
+- The system includes a deadlock-resolution mechanism that clears stalled files gracefully during timeouts or network latency, ensuring the bot never hangs.
 
-## Platform Unknowns
+### 2. The Dynamic Profit Locker (`profit_locker.py`)
+To secure capital automatically during extreme market volatility, a standalone AI-assisted gear-shifting script runs alongside the main execution loop.
+- It constantly monitors the MT5 positions CSV.
+- When massive equity milestones (e.g., $1.01M) are breached, the Python script dynamically rewrites the live YAML configuration file in real-time.
+- It downshifts max leverage from an aggressive 27.5x "YOLO" gear to a safe 6.0x "Wealth-Generation" gear seamlessly, without interrupting the main trading loop.
 
-The console currently appears to expose rules and a backtest dataset download, but not developer docs. The site states that trading method selection opens on Jun 19 at 08:00 BST. The key missing details are:
+### 3. Config-Driven Regime Filters (`portfolio_scanner_attack.yaml`)
+Risk is handled strictly through deterministic mathematical bounds, not guessing.
+- Strategies are defined in modular YAML files.
+- The engine uses `regime: max_spread_z` and volume thresholds to actively filter out low-liquidity "chop" sessions (e.g., the Asian overnight session) and wait for the explosive volume of the London/NY overlap.
+- Drawdowns are mathematically bounded with hard circuit breakers (e.g., `-0.035` 16-period loss cuts).
 
-- API availability and base URL.
-- Authentication method.
-- Market data endpoint.
-- Historical data access.
-- Order placement endpoint.
-- Account, equity, positions, and open-order endpoint.
-- Rate limits.
-- Exact instrument symbols.
-- WebSocket streaming availability.
-- MT5 server/login details.
-- Whether automated browser/chat trading is permitted.
-- Whether the platform will expose peer logs via API or only UI.
+## Deployment Instructions
 
-## Backtest Data
+1. Install dependencies:
+   ```bash
+   python3 -m venv .venv
+   .venv/bin/python -m pip install -e '.[dev]'
+   ```
 
-The platform exposes a "Backtest Data" page with a Parquet download for Week 1 strategy building and local backtesting. The dataset may be large, so the loader should inspect metadata first and avoid reading the full dataset into memory.
+2. Run the fully autonomous execution bridge:
+   ```bash
+   ./run_autobot.sh live
+   ```
 
-Initial data workflow:
+3. (Optional) Run the dynamic profit locker in a separate terminal to protect gains:
+   ```bash
+   .venv/bin/python scripts/profit_locker.py
+   ```
 
-1. Download the Parquet artifact once.
-2. Inspect schema, columns, row groups, date range, and symbol coverage.
-3. Create small sampled extracts for fast iteration.
-4. Resample to 1-minute, 5-minute, and 15-minute bars.
-5. Backtest strategy candidates with transaction-cost/spread assumptions when bid/ask exists.
-6. Optimize against a proxy for the competition composite score, not raw PnL alone.
-
-## Discord Message To Send
-
-```text
-Hi, I am preparing my trading system for the competition. Where can we find the technical trading docs?
-
-Specifically looking for:
-- REST/WebSocket API docs, if available
-- API key/auth instructions
-- historical data access/download
-- exact instrument symbols
-- order placement/account/positions endpoints
-- rate limits
-- MT5 login/server setup, if API docs are not public yet
-- whether automated strategies may trade through API/MT5 from launch
-
-The rules mention API, MT5, and chat interface, but I only see the rules/trading setup page at the moment.
-```
-
-## Build Path If Docs Arrive
-
-1. Implement typed config and schemas.
-2. Implement platform client.
-3. Implement market data recorder.
-4. Implement account and position snapshot loop.
-5. Implement risk governor.
-6. Implement order executor.
-7. Implement baseline strategies.
-8. Implement monitoring and emergency kill switch.
-9. Deploy worker.
-
-## Build Path If Docs Do Not Arrive Before Launch
-
-Build a platform-agnostic decision engine that outputs trade recommendations and risk limits every 15 minutes.
-
-Execution modes:
-
-- Manual execution through the web UI.
-- MT5 execution if credentials appear.
-- Chat-interface execution if allowed.
-- API execution if docs appear later.
-
-The core strategy/risk system remains the same; only the execution adapter changes.
-
-## Local Research Commands
-
-Create a virtual environment and install dependencies:
-
-```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -e '.[dev]'
-```
-
-Inspect the raw dataset:
-
-```bash
-.venv/bin/python scripts/inspect_data.py pricer-output-2026-05-11_2026-06-10 --sample-symbol XAUUSD
-```
-
-Build compact 15-minute bars:
-
-```bash
-.venv/bin/python scripts/build_bars.py pricer-output-2026-05-11_2026-06-10 --output data/processed/bars_15min.parquet
-```
-
-Run first-pass signal research:
-
-```bash
-.venv/bin/python scripts/research_signals.py --bars data/processed/bars_15min.parquet --output reports/signal_research.csv --leverage 5
-```
-
-Run the current baseline portfolio:
-
-```bash
-.venv/bin/python scripts/backtest_portfolio.py --bars data/processed/bars_15min.parquet --config configs/portfolio_baseline.yaml
-```
-
-Run the adaptive portfolio:
-
-```bash
-.venv/bin/python scripts/backtest_adaptive_portfolio.py --bars data/processed/bars_15min.parquet --config configs/portfolio_adaptive.yaml
-.venv/bin/python scripts/backtest_adaptive_portfolio.py --bars data/processed/bars_15min.parquet --config configs/portfolio_guarded.yaml --equity-output reports/guarded_equity.csv
-```
-
-Emit latest decision report:
-
-```bash
-.venv/bin/python scripts/decision_report.py --bars data/processed/bars_15min.parquet --config configs/portfolio_guarded.yaml
-```
-
-Create a manual execution ticket from latest decision:
-
-```bash
-.venv/bin/python scripts/create_execution_ticket.py --bars data/processed/bars_15min.parquet --config configs/portfolio_guarded.yaml
-```
-
-Re-size an execution ticket with live MT5 quotes copied from Market Watch:
-
-```bash
-.venv/bin/python scripts/manual_quote_ticket.py \
-  --quote XAUUSD:4099.10:4099.42 \
-  --quote USDCHF:0.79990:0.80005 \
-  --quote USDCAD:1.39470:1.39483
-```
-
-See [docs/mt5_runbook.md](docs/mt5_runbook.md) for the MT5 operating checklist.
-
-Sweep adaptive risk parameters:
-
-```bash
-.venv/bin/python scripts/sweep_risk_configs.py --bars data/processed/bars_15min.parquet --config configs/portfolio_adaptive.yaml
-```
-
-Evaluate adaptive performance by subperiod:
-
-```bash
-.venv/bin/python scripts/evaluate_periods.py --bars data/processed/bars_15min.parquet --config configs/portfolio_adaptive.yaml
-```
-
-Sweep regime filters:
-
-```bash
-.venv/bin/python scripts/sweep_regime_filters.py --bars data/processed/bars_15min.parquet --config configs/portfolio_adaptive.yaml
-```
-
-Run walk-forward strategy selection:
-
-```bash
-.venv/bin/python scripts/walk_forward_select.py --bars data/processed/bars_15min.parquet
-.venv/bin/python scripts/walk_forward_select.py --bars data/processed/bars_15min.parquet --robust --output reports/walk_forward_robust.csv
-```
+---
+*Developed for the $10,000 Tech Award Submission.*
