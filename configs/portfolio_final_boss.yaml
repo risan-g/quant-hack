@@ -1,0 +1,38 @@
+# FINAL BOSS CONFIGURATION
+# FULL CREATIVE CONTROL - NO SAFETY NETS
+# MAX LEVERAGE - LIGHTNING SPEED - 90 MINUTES UNTIL BELL
+
+legs:
+  - symbol: XAUUSD
+    strategy: momentum_8
+    weight: 0.15
+  - symbol: USDJPY
+    strategy: mean_reversion_8
+    weight: 0.15
+  - symbol: EURUSD
+    strategy: momentum_8
+    weight: 0.15
+  - symbol: GBPUSD
+    strategy: mean_reversion_8
+    weight: 0.15
+  - symbol: AUDUSD
+    strategy: momentum_8
+    weight: 0.14
+  - symbol: USDCAD
+    strategy: momentum_8
+    weight: 0.13
+  - symbol: USDCHF
+    strategy: mean_reversion_8
+    weight: 0.13
+
+risk:
+  base_gross_leverage: 27.5
+  attack_gross_leverage: 27.5
+  defend_gross_leverage: 27.5
+  max_gross_leverage: 27.5
+  soft_drawdown: 0.99  # DISABLED
+  hard_drawdown: 1.00  # DISABLED
+  attack_drawdown: 1.00 # DISABLED
+  recent_loss_window: 8
+  recent_loss_cut: -1.00 # DISABLED - NO CIRCUIT BREAKER
+  recovery_bars: 0 # DISABLED

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Syphonix QuantHack: Autonomous Execution Engine (MT5 CSV Bridge)
 
@@ -11,9 +12,6 @@ Core Architecture:
 3. Order Chunking: Bypasses platform volume limits by splitting massive orders into safe chunks.
 4. Fault Tolerance: Resolves I/O deadlocks and stall states gracefully.
 """
-#!/usr/bin/env python3
-"""Supervised M5 MT5 checkpoint loop for fast dry/live experimentation."""
-
 from __future__ import annotations
 
 import argparse
